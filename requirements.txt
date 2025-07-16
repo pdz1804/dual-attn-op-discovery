@@ -1,0 +1,26 @@
+numpy
+pandas
+scipy
+torch
+scikit-learn
+# fasttext
+fasttext-wheel
+gensim
+hanziconv
+matplotlib
+spacy
+nltk
+tqdm
+
+# pickle5  # Optional; only needed if you use Python <3.8
+
+# !pip install numpy==1.26.4 scipy==1.13.0 gensim==4.3.3 hanziconv
+
+# Web Utilities (if needed for urllib requests, but generally included in stdlib)
+# urllib3 is optional if you stick to standard urllib.
+
+# Installation commands for models/downloads
+# Run these manually as they are data, not packages:
+# python -m spacy download en_core_web_sm
+# wget https://dl.fbaipublicfiles.com/fasttext/vectors-aligned/wiki.en.align.vec
+# wget https://dl.fbaipublicfiles.com/fasttext/vectors-aligned/wiki.zh.align.vec
