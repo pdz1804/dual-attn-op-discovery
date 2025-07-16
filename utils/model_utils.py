@@ -6,11 +6,14 @@ import logging
 logger = logging.getLogger(__name__)
 
 def train_loop(model, X_train, Y_train, X_val, Y_val, epochs, lr=1e-3):
+    logger.info("Starting training loop of transformer matrix model")
+    
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     loss_fn = torch.nn.MSELoss()
 
     history = {"train_loss": [], "val_loss": [], "train_cos": [], "val_cos": []}
 
+    logger.info(f"Training with {epochs} epochs, learning rate={lr}")
     for epoch in range(epochs):
         model.train()
         optimizer.zero_grad()
@@ -39,7 +42,9 @@ def train_loop(model, X_train, Y_train, X_val, Y_val, epochs, lr=1e-3):
 def extract_matrix(model):
     W1 = model.net[0].weight.detach().cpu().numpy()
     W2 = model.net[2].weight.detach().cpu().numpy()
-    return W2 @ W1
+    matrix = W2 @ W1
+    logger.info(f"Extracted matrix with shape {matrix.shape}")
+    return matrix
 
 def save_model_and_matrix(model, matrix, model_path):
     torch.save(model.state_dict(), model_path)

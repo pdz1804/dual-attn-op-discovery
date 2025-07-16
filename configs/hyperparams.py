@@ -20,4 +20,4 @@ COUNTRY = ['US']
 EPOCHS_TRANS_MATRIX = 100
 
 # Get only partial of the data for training only
-TEST_SIZE = None 
+TEST_SIZE = None

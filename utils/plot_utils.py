@@ -65,4 +65,45 @@ def plot_accuracy(training_history, title="Training Accuracy", save_path=None):
     print(f"[SAVE] Accuracy plot saved to: {save_path}")
 
 
+def plot_train_history_trans_matrix(history, model_name, country, save_dir=None):
+    """
+    Plot training and validation loss and cosine similarity, saving the plots to files.
+    
+    Args:
+        history (dict): Dictionary containing 'train_loss', 'val_loss', 'train_cos', 'val_cos' lists.
+        model_name (str): Name of the model (e.g., 'Patent2Product', 'Product2Patent').
+        country (str): Country code (e.g., 'US', 'CN', 'JP').
+        save_dir (str): Directory to save the plots.
+    """
+    output_dir = _prepare_output_dir()
+    
+    save_path_loss = os.path.join(output_dir, f"trans_matrix_{model_name}_loss.png")
+    save_path_sim = os.path.join(output_dir, f"trans_matrix_{model_name}_sim.png")
+    
+    # Plot Loss
+    plt.figure(figsize=(10, 5))
+    plt.plot(history["train_loss"], label="Training Loss")
+    plt.plot(history["val_loss"], label="Validation Loss")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss (MSE)")
+    plt.title(f"{model_name} Loss - {country}")
+    plt.legend()
+    plt.grid(True)
+    
+    plt.savefig(save_path_loss)
+    plt.close()
+    print(f"Saved loss plot to {save_path_loss}")
 
+    # Plot Cosine Similarity
+    plt.figure(figsize=(10, 5))
+    plt.plot(history["train_cos"], label="Training Cosine Similarity")
+    plt.plot(history["val_cos"], label="Validation Cosine Similarity")
+    plt.xlabel("Epoch")
+    plt.ylabel("Cosine Similarity")
+    plt.title(f"{model_name} Cosine Similarity - {country}")
+    plt.legend()
+    plt.grid(True)
+    
+    plt.savefig(save_path_sim)
+    plt.close()
+    print(f"Saved cosine similarity plot to {save_path_sim}")

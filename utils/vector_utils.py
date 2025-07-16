@@ -28,3 +28,4 @@ def text_to_vector(text, ft_model):
     return np.mean(vectors, axis=0) if vectors else np.zeros(ft_model.vector_size)
 
 
+

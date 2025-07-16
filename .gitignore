@@ -3,6 +3,7 @@ myenv/
 data/*
 .env
 *.log
+notebooks/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
