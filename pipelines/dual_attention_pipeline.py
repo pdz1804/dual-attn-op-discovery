@@ -1,6 +1,8 @@
 # pipelines/dual_attention_pipeline.py
 
 import logging
+logger = logging.getLogger(__name__)
+
 import pickle
 import torch
 import numpy as np
@@ -22,7 +24,6 @@ from configs.paths import *
 from configs.hyperparams import *
 
 def run():
-    logger = logging.getLogger(__name__)
     logger.info("[DualAttention] Starting pipeline...")
     
     set_seed(42)  # Set seed for reproducibility

@@ -1,4 +1,6 @@
 # utils/plot_utils.py
+import logging
+logger = logging.getLogger(__name__)
 
 import matplotlib.pyplot as plt
 import os
@@ -34,7 +36,7 @@ def plot_loss(training_history, title="Training Loss", save_path=None):
     plt.grid(True)
     plt.savefig(save_path)
     plt.close()
-    print(f"[SAVE] Loss plot saved to: {save_path}")
+    logger.info(f"[SAVE] Loss plot saved to: {save_path}")
 
 def plot_accuracy(training_history, title="Training Accuracy", save_path=None):
     """

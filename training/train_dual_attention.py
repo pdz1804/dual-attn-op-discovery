@@ -4,8 +4,6 @@ logger = logging.getLogger(__name__)
 import torch
 import time
 from tqdm import tqdm
-from configs import hyperparams
-from models.dual_attention import DualAttnModel
 from training.evaluate import evaluate
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

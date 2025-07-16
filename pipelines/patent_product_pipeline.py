@@ -1,4 +1,6 @@
 import logging
+logger = logging.getLogger(__name__)
+
 import json
 import os
 import pandas as pd
@@ -17,8 +19,6 @@ from utils.model_utils import train_loop, extract_matrix, save_model_and_matrix
 from utils.plot_utils import plot_train_history_trans_matrix
 from inference.query_opportunity_best import query_opportunity_product_best
 from inference.query_opportunity_matrix import query_opportunity_product_matrix_only
-
-logger = logging.getLogger(__name__)
 
 def save_representations_to_json(rep_dict, file_path):
     """Save a dictionary of representations to a JSON file."""

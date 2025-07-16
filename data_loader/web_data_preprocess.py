@@ -1,11 +1,11 @@
+import logging
+logger = logging.getLogger(__name__)
+
 import re
 import spacy
 import pandas as pd
 from nltk.corpus import stopwords as sw
 from tqdm import tqdm
-import logging
-
-logger = logging.getLogger(__name__)
 
 tqdm.pandas()          # Enable for pandas
 
