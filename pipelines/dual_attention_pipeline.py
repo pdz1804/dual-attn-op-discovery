@@ -263,7 +263,7 @@ def extract_company_embeddings(model, tokenizer, seq_ids, num_pages, seq_lengths
     sents_selected = []
 
     for t in tqdm(range(len(hojin_ids)), desc="Processing companies", ncols=100):
-        # Running the trained DualAttnModel on each company’s document (a set of webpages) to get:
+        # Running the trained DualAttnModel on each company's document (a set of webpages) to get:
         # - attn: word-level attention (1 vector per page),
         # - page_attn: attention over pages (page importance),
         # - final_vec: representation of the entire company website,
@@ -279,7 +279,7 @@ def extract_company_embeddings(model, tokenizer, seq_ids, num_pages, seq_lengths
         id_to_token[0] = '#'
         
         # Convert token IDs back to words
-        # => Transform each page’s word IDs back into real words → forms the page's content as a sentence.
+        # => Transform each page's word IDs back into real words → forms the page's content as a sentence.
         sents = []
         for i in range(num_pages[t:(t+1)].tolist()[0]):
             sents.append(' '.join([id_to_token[w] for w in seq_ids[t:(t+1)][0][i].tolist()]))
@@ -329,7 +329,7 @@ def extract_company_embeddings(model, tokenizer, seq_ids, num_pages, seq_lengths
             words = sent.split()
             color_array = np.array(attn1.view(-1).tolist())
 
-            selected_keywords, selected_keywords_show = select_keywords(color_array, words, n=20)
+            selected_keywords, selected_keywords_show = select_keywords(color_array, words, n=SELECTED_KEYWORDS_N)
             html = colorize(words, selected_keywords_show)
 
             sents_selected.append([j for j, k in zip(words, selected_keywords_show) if k != 0])
@@ -353,6 +353,19 @@ def extract_company_embeddings(model, tokenizer, seq_ids, num_pages, seq_lengths
     })
 
     return company_embeddings, selected_df
+
+# Pipeline function to be called from main.py
+def dual_attention_pipeline(config=None):
+    """
+    Main pipeline function called from main.py
+    """
+    if config and config.get('embedding_type') == 'sentence_transformer':
+        # For now, dual attention always uses FastText, but we log the config
+        logger.info("Note: Dual attention model uses FastText embeddings regardless of config")
+        logger.info("Future versions may support post-processing with sentence transformers")
+    
+    # Run the standard dual attention pipeline
+    run()
 
 
 

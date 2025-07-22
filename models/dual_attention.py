@@ -142,12 +142,6 @@ class DualAttnModel(nn.Module):
             # Old 
             webpage_vec = attn_output.mean(dim=1).view(batch_size, max_page, hidden_dim)
             
-            # New: not yet
-            
-            
-            # Old 
-            # word_attn = None
-            
             # New
             # Reshape attn_weights back: (B*P, L, L) → we take attention of [CLS] or mean across heads
             word_attn = attn_weights.view(batch_size, max_page, max_len, max_len)  # [B, P, Lq, Lk]

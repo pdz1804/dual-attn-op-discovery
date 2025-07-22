@@ -14,15 +14,25 @@ def query_opportunity_product_best(
     top_k=5,
     show_patents_per_firm=3
 ):
-    print("\n[Step 1] Embed user product query from individual words...")
-    query_tokens = product_query_text.strip().split()
-    token_vecs = [ft_model[w] for w in query_tokens if w in ft_model]
+    print("\n[Step 1] Embed user product query...")
+    
+    # Check if ft_model is an enhanced embedder or traditional FastText
+    if hasattr(ft_model, 'encode_text'):
+        # Enhanced embedder (sentence transformer)
+        print("Using sentence transformer embedder...")
+        product_vec = ft_model.encode_text(product_query_text)
+    else:
+        # Traditional FastText embedder
+        print("Using FastText embedder...")
+        query_tokens = product_query_text.strip().split()
+        token_vecs = [ft_model[w] for w in query_tokens if w in ft_model]
 
-    if not token_vecs:
-        print("❌ None of the tokens are in FastText vocabulary.")
-        return
+        if not token_vecs:
+            print("❌ None of the tokens are in FastText vocabulary.")
+            return
 
-    product_vec = np.mean(token_vecs, axis=0)
+        product_vec = np.mean(token_vecs, axis=0)
+    
     product_tensor = torch.tensor(product_vec, dtype=torch.float32).unsqueeze(0)
 
     print("\n[Step 2] Predict technical field vector using model B (nonlinear)...")
@@ -48,28 +58,37 @@ def query_opportunity_product_best(
             print("     No associated patents found.")
             continue
 
-        print(f"     Showing {min(show_patents_per_firm, len(patent_ids))} patent(s):")
-        for p_id in patent_ids[:show_patents_per_firm]:
-            abstract_preview = patent_text_map.get(p_id, "(no abstract)")
-            print(f"       • appln_id: {p_id}, preview: {abstract_preview}")
+        print(f"     Associated Patents ({len(patent_ids)} patents):")
+        for j, patent_id in enumerate(patent_ids[:show_patents_per_firm]):
+            abstract = patent_text_map.get(patent_id, "No abstract available")
+            # Truncate abstract for display
+            abstract_preview = abstract[:100] + "..." if len(abstract) > 100 else abstract
+            print(f"       {j+1}. Patent ID: {patent_id}")
+            print(f"          Abstract: {abstract_preview}")
+        
+        if len(patent_ids) > show_patents_per_firm:
+            print(f"       ... and {len(patent_ids) - show_patents_per_firm} more patents.")
 
-    print("\n[Step 4] Map predicted patent vector back to market vector using model A (nonlinear)...")
-    with torch.no_grad():
-        market_tensor = model_A(patent_tensor)  # shape: (1, D_product)
-        predicted_market_field_vec = market_tensor.squeeze().numpy()
+    print(f"\n✅ Found {len(top_k_field_idx)} top companies and their associated patents.")
 
-    print("\n[Step 5] Find top-k companies (firm-level product vectors) similar to this predicted market field...")
-    all_product_vecs = np.stack(list(product_rep_dict.values()))
-    all_product_firms = list(product_rep_dict.keys())
-
-    sims_firm = cosine_similarity([predicted_market_field_vec], all_product_vecs)[0]
-    top_k_firm_idx = sims_firm.argsort()[-top_k:][::-1]
-
-    print("\n🏢 Top-k firms likely aligned with your product:")
-    for rank, idx in enumerate(top_k_firm_idx):
-        firm_id = all_product_firms[idx]
+    # Return results for further processing if needed
+    results = []
+    for rank, idx in enumerate(top_k_field_idx):
+        firm_id = all_firm_ids[idx]
         firm_name = firm_id_name_map.get(firm_id, "Unknown")
-        print(f"{rank+1}. Firm ID: {firm_id}, Name: {firm_name}, Cosine Sim: {sims_firm[idx]:.4f}")
+        patent_ids = firm_patent_ids.get(firm_id, [])
+        
+        results.append({
+            'rank': rank + 1,
+            'firm_id': firm_id,
+            'firm_name': firm_name,
+            'cosine_similarity': sims[idx],
+            'predicted_patent_vec': predicted_patent_vec,
+            'patent_ids': patent_ids,
+            'num_patents': len(patent_ids)
+        })
+    
+    return results
 
 
 

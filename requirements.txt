@@ -8,9 +8,19 @@ fasttext-wheel
 gensim
 hanziconv
 matplotlib
+seaborn
 spacy
 nltk
 tqdm
+
+# New dependencies for enhanced features
+sentence-transformers
+streamlit
+chromadb
+langchain
+langchain-community
+openai
+plotly
 
 # pickle5  # Optional; only needed if you use Python <3.8
 

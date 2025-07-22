@@ -24,37 +24,152 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-# Import from files 
-from configs.paths import *
+# Import from configs
 from configs.hyperparams import *
 from utils.seed_everything import set_seed
-from pipelines import dual_attention_pipeline, patent_product_pipeline
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--pipeline', type=str, choices=['dual_attn', 'patent_product'], required=True)
-    parser.add_argument('--mode', type=str, choices=['train', 'test', 'chat'], default=None, help="Train/Test/Chat mode (only for patent_product pipeline)")
+    parser = argparse.ArgumentParser(
+        description='FullFlow Patent-Product Matching System',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python main.py --pipeline dual_attn
+  python main.py --pipeline patent_product --mode train
+  python main.py --pipeline patent_product --mode test --embedding_type sentence_transformer
+  python main.py --pipeline patent_product --mode chat --use_rag
+  python main.py --pipeline rag_only --query "machine learning algorithms"
+        """
+    )
+    
+    # Main pipeline selection
+    parser.add_argument('--pipeline', 
+                        choices=['dual_attn', 'patent_product', 'rag_only', 'clustering'], 
+                        required=True,
+                        help='Pipeline to run')
+    
+    # Mode for patent_product pipeline
+    parser.add_argument('--mode', 
+                        choices=['train', 'test', 'chat'],
+                        help='Mode for patent_product pipeline (required for patent_product)')
+    
+    # Embedding configuration
+    parser.add_argument('--embedding_type', 
+                        choices=['fasttext', 'sentence_transformer'], 
+                        default='fasttext',
+                        help='Type of embeddings to use')
+    
+    parser.add_argument('--sentence_transformer_model', 
+                        default='all-MiniLM-L6-v2',
+                        help='Sentence transformer model name')
+    
+    # RAG configuration
+    parser.add_argument('--use_rag', 
+                        action='store_true',
+                        help='Use RAG approach for testing/chatting')
+    
+    parser.add_argument('--rag_use_external_summaries', 
+                        action='store_true',
+                        help='Use external summaries for RAG instead of dual attention keywords')
+    
+    parser.add_argument('--rag_top_k', 
+                        type=int, 
+                        default=5,
+                        help='Number of top results for RAG queries')
+    
+    # UI and flow configuration
+    parser.add_argument('--ui_flow_type', 
+                        choices=['ml', 'rag'], 
+                        default='ml',
+                        help='UI flow type')
+    
+    parser.add_argument('--enable_dual_attention', 
+                        action='store_true', 
+                        default=True,
+                        help='Enable dual attention model')
+    
+    parser.add_argument('--enable_transformation_matrix', 
+                        action='store_true', 
+                        default=True,
+                        help='Enable transformation matrix')
+    
+    # Force rebuild options
+    parser.add_argument('--force_rebuild_rag', 
+                        action='store_true',
+                        help='Force rebuild RAG vector database')
+    
+    parser.add_argument('--force_rebuild_clustering', 
+                        action='store_true',
+                        help='Force rebuild clustering models')
+    
+    # Clustering configuration
+    parser.add_argument('--enable_clustering', 
+                        action='store_true',
+                        help='Enable clustering analysis')
+    
+    # Query for rag_only pipeline
+    parser.add_argument('--query', 
+                        type=str,
+                        help='Query string for rag_only pipeline')
+    
+    # Display configuration
+    parser.add_argument('--max_keywords_display',
+                        type=int,
+                        default=MAX_KEYWORDS_DISPLAY,
+                        help=f'Maximum number of keywords to display in results (default: {MAX_KEYWORDS_DISPLAY})')
 
     args = parser.parse_args()
     
-    set_seed(42)  # Set seed for reproducibility
+    # Create configuration dictionary from arguments
+    config = {
+        'embedding_type': args.embedding_type,
+        'sentence_transformer_model': args.sentence_transformer_model,
+        'use_rag': args.use_rag,
+        'rag_use_external_summaries': args.rag_use_external_summaries,
+        'rag_top_k': args.rag_top_k,
+        'ui_flow_type': args.ui_flow_type,
+        'enable_dual_attention': args.enable_dual_attention,
+        'enable_clustering': args.enable_clustering,
+        'enable_transformation_matrix': args.enable_transformation_matrix,
+        'force_rebuild_rag': args.force_rebuild_rag,
+        'force_rebuild_clustering': args.force_rebuild_clustering,
+        'enable_clustering': args.enable_clustering,
+        'query': args.query,
+        'max_keywords_display': args.max_keywords_display
+    }
+    
+    set_seed(42)
+    
+    logger.info(f"Starting pipeline: {args.pipeline}")
+    logger.info(f"Configuration: {config}")
 
+    # Route to appropriate pipeline
     if args.pipeline == 'dual_attn':
-        dual_attention_pipeline.run()
+        from pipelines.dual_attention_pipeline import dual_attention_pipeline
+        dual_attention_pipeline(config)
 
     elif args.pipeline == 'patent_product':
         if args.mode is None:
             raise ValueError("Error: --mode is required for patent_product pipeline. Use --mode=train / test / chat.")
-
+        
+        from pipelines.patent_product_pipeline import train_pipeline, test_pipeline, chat_pipeline
+        
         if args.mode == 'train':
-            patent_product_pipeline.train_pipeline()
+            train_pipeline(config)
         elif args.mode == 'test':
-            patent_product_pipeline.test_pipeline()
+            test_pipeline(config)
         elif args.mode == 'chat':
-            patent_product_pipeline.test_pipeline_chat()
+            chat_pipeline(config)
+        
+    elif args.pipeline == 'rag_only':
+        from pipelines.patent_product_pipeline import rag_only_pipeline
+        rag_only_pipeline(config)
+    
+    elif args.pipeline == 'clustering':
+        from pipelines.clustering_pipeline import clustering_pipeline
+        clustering_pipeline(config)
 
 if __name__ == "__main__":
-    # your pipeline code here
     main()
     exit(1)  # Exit after running the pipeline
     

@@ -1,186 +1,458 @@
-# Dual Attention Opportunity Discovery
+# 🔬 FullFlow Patent-Product Matching System
 
----
+**Advanced AI-powered system for patent-product matching with dual attention models, transformation matrices, RAG, and clustering analysis**
 
-## Overview
+## 🌟 Overview
 
-This repository implements a sophisticated approach to market research and technology discovery using machine learning techniques. It leverages the **Dual Attention Model** to extract relevant keywords from company webpages, followed by a **Transformation Matrix** to map relationships between companies and patents. The end goal is to enable users to identify patents or companies associated with specific technologies of interest, facilitating informed decision-making during market research.
+FullFlow is a comprehensive system that provides two main approaches for patent-product matching:
 
-### Key Features
+1. **🧠 ML Flow**: Uses Dual Attention Model + Transformation Matrix
+2. **🔍 RAG Flow**: Uses Retrieval-Augmented Generation with ChromaDB
 
-- Extracts keywords from company webpages using the Dual Attention Model.
-- Computes a Transformation Matrix to establish mappings between companies and patents.
-- Provides a pipeline for discovering technology-related patents or companies.
-- Includes modular code for preprocessing, modeling, and evaluation.
+Both flows support **FastText** and **Sentence Transformer** embeddings, with advanced clustering analysis for market insights.
 
-<!-- ![Web Scraping](imgs/IDS_webscraping.png "Web Scraping Process")
-![Dual Attention Model](imgs/IDS_Dual%20Attention%20Model.png "Dual Attention Mechanism")
-![Transformation Matrix](imgs/IDS_Approach01_Transformation%20Matrix.png "Transformation Matrix Approach") -->
-
-<details>
-<summary><strong>Toggle to view Web Scraping Process</strong></summary>
-<img src="imgs/IDS_webscraping.png" alt="Web Scraping Process" style="max-width: 100%;">
-</details>
-
-<details>
-<summary><strong>Toggle to view Dual Attention Mechanism</strong></summary>
-<img src="imgs/IDS_Dual%20Attention%20Model.png" alt="Dual Attention Mechanism" style="max-width: 100%;">
-</details>
-
-<details>
-<summary><strong>Toggle to view Transformation Matrix Approach</strong></summary>
-<img src="imgs/IDS_Approach01_Transformation%20Matrix.png" alt="Transformation Matrix Approach" style="max-width: 100%;">
-</details>
-
----
-
-## Prerequisites
-
-- Python 3.8 or higher
-- Git (for cloning the repository)
-- Required Python packages (listed in `requirements.txt`)
-
----
-
-## Installation
-
-### Cloning the Repository
-
-To get started, clone the repository from GitHub using the following command:
+## 🛠️ Installation
 
 ```bash
-git clone https://github.com/pdz1804/dual-attn-op-discovery.git
+# Clone the repository
+git clone <repository-url>
+cd FullFlow
+
+# Create virtual environment
+python -m venv myenv
+source myenv/bin/activate  # On Windows: myenv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Download required models and data
+python -c "import spacy; spacy.download('en_core_web_sm')"
 ```
 
-Navigate to the project directory:
+## 📊 System Flows
+
+### Flow 1: ML Approach (Dual Attention + Transformation Matrix)
+```
+Training: Data → Dual Attention Model → Keywords → Transformation Matrix → Clustering
+Testing:  Input Query  → Keywords → Transformation Matrix → Results
+```
+
+### Flow 2: RAG Approach (Retrieval-Augmented Generation)
+```
+Training: Data → Dual Attention Model → Company Documents → ChromaDB → Clustering  
+Testing:  Input Query → Query Embedding → ChromaDB Search → Semantic Matching → Results
+```
+
+## 🚀 Complete Workflows
+
+## 🧠 Flow 1: ML Approach
+
+### 📚 Training Phase
+
+#### Step 1: Train Dual Attention Model (Required for Both Flows)
+```bash
+# Train dual attention model (always uses FastText)
+python main.py --pipeline dual_attn
+```
+
+#### Step 2: Train Transformation Matrix
+
+**With FastText embeddings:**
+```bash
+# Train transformation matrix with FastText embeddings
+python main.py --pipeline patent_product --mode train --embedding_type fasttext
+```
+
+**With Sentence Transformer embeddings:**
+```bash
+# Train transformation matrix with Sentence Transformer embeddings
+python main.py --pipeline patent_product --mode train --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2
+```
+
+#### Step 3: Build Clustering Analysis
+
+**For FastText embeddings:**
+```bash
+# Build clustering analysis with FastText
+python main.py --pipeline clustering --embedding_type fasttext --enable_clustering
+```
+
+**For Sentence Transformer embeddings:**
+```bash
+# Build clustering analysis with Sentence Transformers
+python main.py --pipeline clustering --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2 --enable_clustering
+```
+
+**Note**: Should add `--force_rebuild_clustering` if you want to build the second clustering things
+
+### 🔍 Testing/Inference Phase (With Queries)
+
+**Test and Chat with FastText:**
+```bash
+# Test ML approach with FastText
+python main.py --pipeline patent_product --mode test --embedding_type fasttext --enable_clustering
+
+# Interactive chat with FastText
+python main.py --pipeline patent_product --mode chat --embedding_type fasttext --enable_clustering
+```
+
+**Test and Chat with Sentence Transformers:**
+```bash
+# Test ML approach with Sentence Transformers
+python main.py --pipeline patent_product --mode test --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2 --enable_clustering
+
+# Interactive chat with Sentence Transformers
+python main.py --pipeline patent_product --mode chat --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2 --enable_clustering
+```
+
+---
+
+## 🔍 Flow 2: RAG Approach
+
+### 📚 Training Phase 
+
+#### Step 1: Train Dual Attention Model (Same as ML Flow)
+```bash
+# Train dual attention model (required for RAG document creation)
+python main.py --pipeline dual_attn
+```
+
+#### Step 2: Build RAG Vector Database
+
+**With FastText embeddings:**
+```bash
+# Build RAG system with FastText embeddings
+python main.py --pipeline patent_product --mode train --use_rag --embedding_type fasttext
+```
+
+**With Sentence Transformer embeddings:**
+```bash
+# Build RAG system with Sentence Transformer embeddings
+python main.py --pipeline patent_product --mode train --use_rag --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2
+```
+
+**Note**: should add `--force_rebuild_rag` if want to rebuild the RAG.
+
+#### Step 3: Build Clustering Analysis (Same as ML Flow)
+
+**For FastText embeddings:**
+```bash
+# Build clustering for RAG with FastText
+python main.py --pipeline clustering --embedding_type fasttext --enable_clustering
+```
+
+**For Sentence Transformer embeddings:**
+```bash
+# Build clustering for RAG with Sentence Transformers
+python main.py --pipeline clustering --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2 --enable_clustering
+```
+
+### 🔍 Testing/Inference Phase (With Queries)
+
+**Test and Chat with FastText:**
+```bash
+# Test RAG approach with FastText
+python main.py --pipeline patent_product --mode test --use_rag --embedding_type fasttext --rag_top_k 5 --enable_clustering
+
+# Interactive chat with RAG (FastText)
+python main.py --pipeline patent_product --mode chat --use_rag --embedding_type fasttext --rag_top_k 5 --enable_clustering
+
+# Direct RAG query with FastText
+python main.py --pipeline rag_only --embedding_type fasttext --query "machine learning algorithms for medical diagnosis"
+```
+
+**Test and Chat with Sentence Transformers:**
+```bash
+# Test RAG approach with Sentence Transformers
+python main.py --pipeline patent_product --mode test --use_rag --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2 --rag_top_k 5 --enable_clustering
+
+# Interactive chat with RAG (Sentence Transformers)
+python main.py --pipeline patent_product --mode chat --use_rag --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2 --rag_top_k 5 --enable_clustering
+
+# Direct RAG query with Sentence Transformers
+python main.py --pipeline rag_only --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2 --query "renewable energy storage systems"
+```
+
+## 🎛️ Streamlit Web Interface
+
+Launch the interactive web interface:
 
 ```bash
-cd dual-attn-op-discovery
+# Start Streamlit app
+streamlit run streamlit_app.py
 ```
 
-### Setting Up the Environment
+The web interface provides:
+- **🔍 Query Interface**: Interactive query processing
+- **🎯 Clustering Analysis**: Visual cluster exploration
+- **📊 Demo Examples**: Sample results without real data
+- **🔧 System Status**: Component monitoring
+- **📚 Documentation**: In-app help and guides
 
-1. Create a virtual environment (optional but recommended):
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-2. Install the required dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
+## 🔧 Advanced Configuration
 
----
+### Clustering Options
+```bash
+# Force rebuild clustering models
+--force_rebuild_clustering
 
-## Usage
-
-### Directory Structure
-
-```
-dual-attn-op-discovery/
-├── config/                                 # Configuration files
-│   ├── hyperparams.py                      # Hyperparameter settings
-│   └── paths.py                            # Path configurations
-├── data/                                   # Datasets and data processing
-│   ├── CNJP_US_data/                       # Country-specific data
-│   ├── models/                             # Trained Models
-│   └── outputs/                            # Output files
-├── data_loader/                            # Data loading utilities
-│   ├── tokenizer.py                        # Tokenizer implementation
-│   └── web_data_preprocess.py              # Web data preprocessing
-├── imgs/                                   # Images and visualizations
-├── models/                                 # Model-related scripts
-│   ├── dual_attention.py                   # Dual Attention model
-│   ├── patent2product.py                   # Patent-to-product mapping
-│   └── product2patent.py                   # Product-to-patent mapping
-├── myenv/                                  # Environment configuration files
-├── notebooks/                              # Jupyter notebooks for experimentation
-│   ├── rerun-dual-attention-mode.ipynb     # Dual attention experiment
-│   └── rerun-transformation_matrix.ipynb   # Transformation matrix experiment
-├── pipelines/                              # Pipeline scripts
-│   ├── dual_attention_pipeline.py          # Dual attention pipeline
-│   └── patent_product_pipeline.py          # Patent-product pipeline
-├── training/                               # Training and evaluation scripts
-│   ├── train_dual_attention.py             # Dual attention training
-│   └── evaluate.py                         # Dual attention evaluating
-├── utils/                                  # Utility functions
-│   ├── colorize_attention.py               # Attention visualization
-│   ├── count_params.py                     # Parameter counting
-│   ├── model_utils.py                      # Model utilities
-│   ├── plot_utils.py                       # Plotting utilities
-│   ├── seed_everything.py                  # Random seed management
-│   ├── select_keywords.py                  # Keyword selection
-│   └── vector_utils.py                     # Vector utilities
-├── .gitignore                              # Git ignore file
-├── main.py                                 # Main entry point
-├── pdzttb.log                              # Log file
-├── README.md                               # Repository documentation
-├── requirements.txt                        # Dependency list
+# Enable clustering analysis
+--enable_clustering
 ```
 
-### Running the Code
+### RAG Configuration
+```bash
+# Use external company summaries instead of dual attention keywords
+--rag_use_external_summaries
 
-The application can be run using the `main.py` script with command-line arguments to select the pipeline and mode. Use the following commands based on your needs:
+# Adjust number of retrieved documents
+--rag_top_k 10
 
-- **Run the Dual Attention Pipeline**:
+# Force rebuild RAG vector database
+--force_rebuild_rag
+```
 
-  ```bash
-  python main.py --pipeline=dual_attn
-  ```
+### Display Configuration
+```bash
+# Customize keyword display in results  
+python main.py --pipeline patent_product --mode test --max_keywords_display 50
 
-  This executes the `dual_attention_pipeline.run()` function to extract keywords from company webpages.
-- **Run the Patent-Product Pipeline**:
-  The `patent_product` pipeline supports three modes: `train`, `test`, and `chat`. Specify the mode using the `--mode` argument:
+# Example: Show only top 20 keywords
+python main.py --pipeline patent_product --mode test --max_keywords_display 20
+```
 
-  - **Train Mode**:
-    ```bash
-    python main.py --pipeline=patent_product --mode=train
-    ```
+**Display Options:**
+- `--max_keywords_display`: Number of keywords shown in results (default: 50)
+- `KEYWORDS_PER_COMPANY_CLUSTER`: Keywords shown per company in cluster view (default: 5)  
+- `COMPANIES_PER_CLUSTER_DISPLAY`: Sample companies shown per cluster (default: 3)
 
-    This runs `patent_product_pipeline.train_pipeline()` to train the models.
-  - **Test Mode**:
-    ```bash
-    python main.py --pipeline=patent_product --mode=test
-    ```
+### UI Flow Configuration
+```bash
+# Set UI flow type
+--ui_flow_type ml    # or rag
 
-    This runs `patent_product_pipeline.test_pipeline()` to evaluate the models.
-  - **Chat Mode**:
-    ```bash
-    python main.py --pipeline=patent_product --mode=chat
-    ```
+# Enable/disable components
+--enable_dual_attention
+--enable_transformation_matrix
+```
 
-    This runs `patent_product_pipeline.test_pipeline_chat()` for interactive querying.
+## 📁 Output Structure
 
-**Note**: Ensure `config/hyperparams.py` and `config/paths.py` are configured before running the scripts. Logs are saved to `pdzttb.log`, and outputs are stored in `data/outputs/` or `models/`.
+```
+FullFlow/
+├── data/
+│   ├── embeddings/
+│   │   ├── fasttext/
+│   │   └── sentence_transformer/
+│   ├── clustering/
+│   │   ├── models/
+│   │   ├── results/
+│   │   └── analysis/
+│   ├── output/
+│   │   ├── img/                    # Clustering plots
+│   │   └── enhanced/               # Enhanced model outputs
+│   └── vector_db/                  # ChromaDB storage
+├── models/
+│   ├── trained_models/
+│   └── transformation_matrices/
+├── streamlit_data/
+└── pdzttb.log                      # Main log file
+```
 
-### Output
+## 🔬 Example Queries for Testing
 
-- Keyword extractions are saved in `data/outputs/`.
-- Transformation Matrix and mappings are generated in `models/` or `data/`.
+### AI and Medical Technology
+```bash
+python main.py --pipeline rag_only --query "machine learning algorithms for medical diagnosis and patient monitoring systems"
+```
 
----
+### Energy and Sustainability
+```bash
+python main.py --pipeline rag_only --query "renewable energy storage systems with lithium-ion battery technology"
+```
 
-## Contributing
+### Autonomous Vehicles
+```bash
+python main.py --pipeline rag_only --query "autonomous vehicle navigation systems using computer vision"
+```
 
-Contributions are welcome! Please fork the repository, create a feature branch, and submit a pull request with detailed changes.
+### Quantum Computing
+```bash
+python main.py --pipeline rag_only --query "quantum computing applications for cryptographic security"
+```
 
----
+## 📊 Performance Comparison
 
-## License
+| Method | Embedding Type | Speed | Memory | Use Case |
+|--------|---------------|-------|--------|----------|
+| ML-Matrix | FastText | Fast | Low | Structured queries |
+| ML-Matrix | Sentence | Medium | Medium | Semantic matching |
+| RAG | FastText | Medium | Medium | Natural language |
+| RAG | Sentence | Slow | High | Complex queries |
 
-This project is licensed under the **MIT License**. See [`LICENSE`](./LICENSE) for details.
+## 🎯 Clustering Insights
 
----
+The clustering analysis provides:
 
-## Author
+- **📈 Multi-Metric Evaluation**: Silhouette, Calinski-Harabasz, Davies-Bouldin scores
+- **🏆 Optimal Cluster Selection**: Automated ranking and selection
+- **📊 Visual Analysis**: Performance plots and cluster distributions
+- **🏢 Market Segmentation**: Company grouping by technology domains
+- **🔍 Query-Cluster Matching**: Find nearest clusters for queries
 
-Built by [Nguyen Quang Phu (pdz1804)](https://github.com/pdz1804) and [Tieu Tri Bang (DarynBang)](https://github.com/DarynBang). 
+## 🚨 Troubleshooting
 
----
+### Common Issues
 
-## Contact
+**"No clustering results found"**
+```bash
+# Run clustering pipeline first
+python main.py --pipeline clustering --embedding_type fasttext --enable_clustering
+```
 
-Reach out or open an [issue](https://github.com/pdz1804/dual-attn-op-discovery/issues) for support or ideas.
+**"RAG vector database not found"**
+```bash
+# Build RAG database
+python main.py --pipeline patent_product --mode train --use_rag --embedding_type fasttext
+```
 
----
+**"Model files not found"**
+```bash
+# Train models first
+python main.py --pipeline patent_product --mode train --embedding_type fasttext
+```
+
+**"--mode is required for patent_product pipeline"**
+```bash
+# Always specify mode for patent_product pipeline
+python main.py --pipeline patent_product --mode train    # or test, chat
+```
+
+**Memory issues with Sentence Transformers**
+```bash
+# Use FastText instead
+--embedding_type fasttext
+
+# Or reduce batch size in configs/hyperparams.py
+BATCH_SIZE = 32  # Reduce from default
+```
+
+## 🏗️ Architecture Overview
+
+### ML Flow Architecture
+```
+Training:  Data → Dual Attention → Keywords → Transformation Matrix → Ready
+Testing:   Query → Dual Attention → Keywords → Matrix Search → Results
+```
+
+### RAG Flow Architecture
+```
+Training:  Data → Dual Attention → Documents → ChromaDB → Ready
+Testing:   Query → Query Embedding → ChromaDB Search → Results
+```
+
+### Clustering Integration
+```
+Training:  Company Embeddings → Multi-Metric Evaluation → Optimal Clusters
+Testing:   Query Results + Cluster Info → Enhanced Results
+```
+
+## 🔄 Quick Start Examples
+
+### Complete ML Pipeline (FastText)
+```bash
+# === TRAINING PHASE ===
+# 1. Train dual attention
+python main.py --pipeline dual_attn
+
+# 2. Train transformation matrix
+python main.py --pipeline patent_product --mode train --embedding_type fasttext
+
+# 3. Build clustering
+python main.py --pipeline clustering --embedding_type fasttext --enable_clustering
+
+# === TESTING PHASE ===
+# 4. Test with clustering
+python main.py --pipeline patent_product --mode test --embedding_type fasttext --enable_clustering
+
+# 5. Interactive chat
+python main.py --pipeline patent_product --mode chat --embedding_type fasttext --enable_clustering
+```
+
+### Complete RAG Pipeline (Sentence Transformers)
+```bash
+# === TRAINING PHASE ===
+# 1. Train dual attention (for document creation)
+python main.py --pipeline dual_attn
+
+# 2. Build RAG database
+python main.py --pipeline patent_product --mode train --use_rag --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2
+
+# 3. Build clustering
+python main.py --pipeline clustering --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2 --enable_clustering
+
+# === TESTING PHASE ===
+# 4. Test RAG with clustering
+python main.py --pipeline patent_product --mode test --use_rag --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2 --rag_top_k 5 --enable_clustering
+
+# 5. Interactive RAG chat
+python main.py --pipeline patent_product --mode chat --use_rag --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2 --rag_top_k 5 --enable_clustering
+
+# 6. Direct RAG queries
+python main.py --pipeline rag_only --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2 --query "your query here"
+```
+
+## 📋 Pipeline Reference
+
+### Available Pipelines
+- **`dual_attn`**: Train dual attention model (always first step)
+- **`patent_product`**: Main pipeline (requires --mode)
+  - `--mode train`: Build models/databases (no queries)
+  - `--mode test`: Test with predefined queries
+  - `--mode chat`: Interactive querying
+- **`rag_only`**: Direct RAG querying (requires --query)
+- **`clustering`**: Build clustering analysis
+
+### Training vs Testing
+- **Training Phase**: Build models, databases, clustering (no queries needed)
+- **Testing Phase**: Use trained components with actual queries
+
+## 📈 Monitoring and Visualization
+
+### View Clustering Plots
+```bash
+# Plots are automatically saved to: data/output/img/
+# - clustering_performance_analysis_[embedding_type]_[country].png
+# - clustering_performance_analysis_[embedding_type]_[country]_ranking_table.png
+```
+
+### Monitor Logs
+```bash
+# Check main log file
+tail -f pdzttb.log
+```
+
+### Launch Streamlit for Visual Monitoring
+```bash
+streamlit run streamlit_app.py
+```
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests
+5. Submit a pull request
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- FastText team for word embeddings
+- Sentence Transformers for semantic embeddings
+- ChromaDB for vector database capabilities
+- Streamlit for the web interface framework
 
