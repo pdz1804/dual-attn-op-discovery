@@ -183,23 +183,6 @@ def run():
 
     logger.info(f"Total params: {count_parameters(model)}")
 
-    # === old code === 
-    # # === Training ===
-    # optimizer = torch.optim.Adagrad(model.parameters(), lr=0.02, weight_decay=0.0000, lr_decay=0.01)
-    # loss_fn = torch.nn.BCELoss()
-
-    # best_model, history = train(model, train_loader, val_loader, optimizer, loss_fn, num_epochs=EPOCHS_DUAL_ATT)
-    # torch.save(best_model, DUAL_ATT_SAVE)
-
-    # plot_loss(history)
-    # plot_accuracy(history)
-
-    # # === Evaluation ===
-    # model.load_state_dict(best_model)
-    # model.eval()
-    # test_metrics = evaluate(model, test_loader)
-    # logger.info(f"Test Metrics: {test_metrics}")
-    
     # === new code ===
     # === Training ===
     logger.info("[STEP 6] Starting training...")

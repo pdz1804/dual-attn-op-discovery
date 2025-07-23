@@ -69,6 +69,16 @@ python main.py --pipeline patent_product --mode train --embedding_type fasttext
 python main.py --pipeline patent_product --mode train --embedding_type sentence_transformer --sentence_transformer_model all-MiniLM-L6-v2
 ```
 
+**New Fixes on 23/07/2025:**
+
+- Now we have create 2 new configs `model_type` and `approx_method`
+- For `model_type`, we can now choose between `linear` and `mlp`, which would be use to train model to map between patents and products (firms)
+- For `approx_method`, now we can choose between `'sampling', 'polynomial', 'kernel'`. **Sampling** here we mean that we would take a samples of data for the trained model to train on, then use that predicted values of the model to train the mapped model. **Polynomial** here we mean the same as **Sampling** but we would use **Polynomial** function to train as the mapped model. For the **kernel**, we mean the same thing but we would use a **Kernel**. 
+- Example usage would be 
+  ```bash
+  python main.py --pipeline patent_product --mode train --embedding_type fasttext --model_type linear --approx_method sampling
+  ```
+
 #### Step 3: Build Clustering Analysis
 
 **For FastText embeddings:**

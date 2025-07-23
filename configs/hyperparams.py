@@ -101,3 +101,4 @@ DBSCAN_EPS = None
 MAX_KEYWORDS_DISPLAY = 50  # Maximum number of keywords to show in results summary
 KEYWORDS_PER_COMPANY_CLUSTER = 10  # Keywords to show per company in cluster display
 COMPANIES_PER_CLUSTER_DISPLAY = 3  # Number of sample companies to show per cluster
+TOP_K_COMPANIES_IN_CLUSTER = 5  # Number of top-k most relevant companies to retrieve in cluster

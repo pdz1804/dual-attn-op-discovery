@@ -207,6 +207,23 @@ class FullFlowApp:
                 help="Matrix mode uses linear transformation, Model mode uses neural networks"
             )
             
+            # New 23/07/2025: Choose model type (linear or mlp)
+            model_type = st.sidebar.selectbox(
+                "Transformation Model Type",
+                ["linear", "mlp"],
+                help="Select the type of transformation model"
+            )
+
+            # Show approx_method only if model_type is not 'linear'
+            if model_type != "linear":
+                approx_method = st.sidebar.selectbox(
+                    "Approximation Method for Matrix Extraction",
+                    ["sampling", "polynomial", "kernel"],
+                    help="Select the approximation method to estimate the transformation matrix"
+                )
+            else:
+                approx_method = None  # Not needed for linear
+            
             # Visual feedback for ML mode choice
             if "Matrix" in ml_mode:
                 st.sidebar.info("🔢 **Matrix Mode**: Linear transformation (faster)")
@@ -315,7 +332,9 @@ class FullFlowApp:
             'clustering_algorithm': clustering_algorithm,
             'force_rebuild_rag': force_rebuild_rag,
             'force_rebuild_clustering': force_rebuild_clustering,
-            'max_keywords_display': max_keywords_display
+            'max_keywords_display': max_keywords_display,
+            'model_type': model_type,
+            'approx_method': approx_method
         }
         
         st.session_state.config = config
@@ -624,14 +643,8 @@ class FullFlowApp:
                         
                         if clustering_analyzer is not None:
                             try:
-                                if hasattr(embedder, 'encode_text'):
-                                    query_embedding = embedder.encode_text(query)
-                                else:
-                                    # FastText embedder
-                                    query_tokens = query.strip().split()
-                                    token_vecs = [embedder[w] for w in query_tokens if w in embedder]
-                                    if token_vecs:
-                                        query_embedding = np.mean(token_vecs, axis=0)
+                                # Always use encode_text since we now use EnhancedEmbedder consistently
+                                query_embedding = embedder.encode_text(query)
                             except Exception as e:
                                 logger.warning(f"Could not compute query embedding: {e}")
                         
@@ -759,13 +772,66 @@ class FullFlowApp:
                                     'cluster_companies': []
                                 }
                                 
-                                # Get sample companies from cluster
-                                if 'companies' in cluster_info:
-                                    for _, company in cluster_info['companies'].head(3).iterrows():
-                                        results['cluster_info']['cluster_companies'].append({
-                                            'name': company.get('company_name', 'Unknown'),
-                                            'keywords': str(company.get('company_keywords', '')).split('|')[:3]
-                                        })
+                                # Get top-k most relevant companies from cluster instead of samples
+                                try:
+                                    if hasattr(clustering_analyzer, 'embeddings_matrix') and clustering_analyzer.embeddings_matrix is not None:
+                                        top_k_companies = clustering_analyzer.get_top_k_companies_in_cluster(
+                                            cluster_id=cluster_id,
+                                            query_embedding=query_embedding,
+                                            k=3,  # Show top 3 companies
+                                            embeddings_dict=None  # Use stored embeddings matrix
+                                        )
+                                        
+                                        if top_k_companies:
+                                            for company in top_k_companies:
+                                                company_name = company.get('company_name', 'Unknown')
+                                                keywords_str = str(company.get('keywords', ''))
+                                                similarity_score = company.get('similarity_score', 0.0)
+                                                
+                                                # Parse keywords
+                                                if keywords_str and keywords_str != 'nan' and keywords_str != '':
+                                                    keywords = keywords_str.split('|')[:3]
+                                                else:
+                                                    keywords = []
+                                                
+                                                results['cluster_info']['cluster_companies'].append({
+                                                    'name': company_name,
+                                                    'keywords': keywords,
+                                                    'similarity_score': similarity_score,
+                                                    'rank_in_cluster': company.get('rank_in_cluster', 0)
+                                                })
+                                        else:
+                                            # Fallback to sample companies
+                                            if 'companies' in cluster_info:
+                                                for _, company in cluster_info['companies'].head(3).iterrows():
+                                                    results['cluster_info']['cluster_companies'].append({
+                                                        'name': company.get('company_name', 'Unknown'),
+                                                        'keywords': str(company.get('company_keywords', '')).split('|')[:3],
+                                                        'similarity_score': None,
+                                                        'rank_in_cluster': None
+                                                    })
+                                    else:
+                                        # Fallback to sample companies if embeddings matrix not available
+                                        if 'companies' in cluster_info:
+                                            for _, company in cluster_info['companies'].head(3).iterrows():
+                                                results['cluster_info']['cluster_companies'].append({
+                                                    'name': company.get('company_name', 'Unknown'),
+                                                    'keywords': str(company.get('company_keywords', '')).split('|')[:3],
+                                                    'similarity_score': None,
+                                                    'rank_in_cluster': None
+                                                })
+                                
+                                except Exception as e:
+                                    logger.warning(f"Could not retrieve top-k companies for cluster, using samples: {e}")
+                                    # Fallback to sample companies
+                                    if 'companies' in cluster_info:
+                                        for _, company in cluster_info['companies'].head(3).iterrows():
+                                            results['cluster_info']['cluster_companies'].append({
+                                                'name': company.get('company_name', 'Unknown'),
+                                                'keywords': str(company.get('company_keywords', '')).split('|')[:3],
+                                                'similarity_score': None,
+                                                'rank_in_cluster': None
+                                            })
                             except Exception as e:
                                 logger.warning(f"Could not determine cluster information: {e}")
                         
@@ -881,14 +947,8 @@ class FullFlowApp:
                         
                         if clustering_analyzer and embedder:
                             try:
-                                if hasattr(embedder, 'encode_text'):
-                                    query_embedding = embedder.encode_text(query)
-                                else:
-                                    # FastText embedder
-                                    query_tokens = query.strip().split()
-                                    token_vecs = [embedder[w] for w in query_tokens if w in embedder]
-                                    if token_vecs:
-                                        query_embedding = np.mean(token_vecs, axis=0)
+                                # Always use encode_text since we now use EnhancedEmbedder consistently
+                                query_embedding = embedder.encode_text(query)
                             except Exception as e:
                                 logger.warning(f"Could not compute query embedding: {e}")
                         
@@ -1074,13 +1134,66 @@ class FullFlowApp:
                                 'cluster_companies': []
                             }
                             
-                            # Get sample companies from cluster
-                            if 'companies' in cluster_info:
-                                for _, company in cluster_info['companies'].head(3).iterrows():
-                                    results['cluster_info']['cluster_companies'].append({
-                                        'name': company.get('company_name', 'Unknown'),
-                                        'keywords': str(company.get('company_keywords', '')).split('|')[:3]
-                                    })
+                            # Get top-k most relevant companies from cluster instead of samples
+                            try:
+                                if hasattr(clustering_analyzer, 'embeddings_matrix') and clustering_analyzer.embeddings_matrix is not None:
+                                    top_k_companies = clustering_analyzer.get_top_k_companies_in_cluster(
+                                        cluster_id=cluster_id,
+                                        query_embedding=query_embedding,
+                                        k=3,  # Show top 3 companies
+                                        embeddings_dict=None  # Use stored embeddings matrix
+                                    )
+                                    
+                                    if top_k_companies:
+                                        for company in top_k_companies:
+                                            company_name = company.get('company_name', 'Unknown')
+                                            keywords_str = str(company.get('keywords', ''))
+                                            similarity_score = company.get('similarity_score', 0.0)
+                                            
+                                            # Parse keywords
+                                            if keywords_str and keywords_str != 'nan' and keywords_str != '':
+                                                keywords = keywords_str.split('|')[:3]
+                                            else:
+                                                keywords = []
+                                            
+                                            results['cluster_info']['cluster_companies'].append({
+                                                'name': company_name,
+                                                'keywords': keywords,
+                                                'similarity_score': similarity_score,
+                                                'rank_in_cluster': company.get('rank_in_cluster', 0)
+                                            })
+                                    else:
+                                        # Fallback to sample companies
+                                        if 'companies' in cluster_info:
+                                            for _, company in cluster_info['companies'].head(3).iterrows():
+                                                results['cluster_info']['cluster_companies'].append({
+                                                    'name': company.get('company_name', 'Unknown'),
+                                                    'keywords': str(company.get('company_keywords', '')).split('|')[:3],
+                                                    'similarity_score': None,
+                                                    'rank_in_cluster': None
+                                                })
+                                else:
+                                    # Fallback to sample companies if embeddings matrix not available
+                                    if 'companies' in cluster_info:
+                                        for _, company in cluster_info['companies'].head(3).iterrows():
+                                            results['cluster_info']['cluster_companies'].append({
+                                                'name': company.get('company_name', 'Unknown'),
+                                                'keywords': str(company.get('company_keywords', '')).split('|')[:3],
+                                                'similarity_score': None,
+                                                'rank_in_cluster': None
+                                            })
+                            
+                            except Exception as e:
+                                logger.warning(f"Could not retrieve top-k companies for cluster, using samples: {e}")
+                                # Fallback to sample companies
+                                if 'companies' in cluster_info:
+                                    for _, company in cluster_info['companies'].head(3).iterrows():
+                                        results['cluster_info']['cluster_companies'].append({
+                                            'name': company.get('company_name', 'Unknown'),
+                                            'keywords': str(company.get('company_keywords', '')).split('|')[:3],
+                                            'similarity_score': None,
+                                            'rank_in_cluster': None
+                                        })
                         
                         status_placeholder.empty()
                         
@@ -1173,15 +1286,29 @@ class FullFlowApp:
                 **🏢 Companies in Cluster:** {cluster_info['cluster_size']}
                 """)
                 
-                # Sample companies from cluster
+                # Top-k most relevant companies from cluster
                 if cluster_info.get('cluster_companies'):
-                    st.markdown("**🏢 Sample Companies in this Cluster:**")
+                    # Check if we have similarity scores to determine display style
+                    has_similarity_scores = any(company.get('similarity_score') is not None for company in cluster_info['cluster_companies'])
+                    
+                    if has_similarity_scores:
+                        st.markdown("**🎯 Top Most Relevant Companies in this Cluster:**")
+                    else:
+                        st.markdown("**🏢 Sample Companies in this Cluster:**")
                     
                     cols = st.columns(len(cluster_info['cluster_companies']))
                     for i, company in enumerate(cluster_info['cluster_companies']):
                         with cols[i]:
-                            st.markdown(f"**{company['name']}**")
-                            keywords = ', '.join(company['keywords'][:3])
+                            # Show rank and similarity if available
+                            if company.get('similarity_score') is not None:
+                                rank = company.get('rank_in_cluster', i+1)
+                                similarity = company.get('similarity_score', 0.0)
+                                st.markdown(f"**#{rank}. {company['name']}**")
+                                st.caption(f"Similarity: {similarity:.3f}")
+                            else:
+                                st.markdown(f"**{company['name']}**")
+                            
+                            keywords = ', '.join(company['keywords'][:KEYWORDS_PER_COMPANY_CLUSTER])
                             st.caption(f"Keywords: {keywords}")
         
         # Company results with enhanced display
@@ -1272,10 +1399,21 @@ class FullFlowApp:
             """)
         
         with col2:
-            st.write("**🏢 Sample Companies in this Cluster:**")
-            for company in cluster_info['cluster_companies'][:3]:
-                st.write(f"• **{company['name']}**")
-                st.caption(f"Keywords: {', '.join(company['keywords'])}")
+            # Check if we have similarity scores to determine display style
+            has_similarity_scores = any(company.get('similarity_score') is not None for company in cluster_info['cluster_companies'][:3])
+            
+            if has_similarity_scores:
+                st.write("**🎯 Top Most Relevant Companies in this Cluster:**")
+                for company in cluster_info['cluster_companies'][:3]:
+                    rank = company.get('rank_in_cluster', 1)
+                    similarity = company.get('similarity_score', 0.0)
+                    st.write(f"• **#{rank}. {company['name']}** (sim: {similarity:.3f})")
+                    st.caption(f"Keywords: {', '.join(company['keywords'])}")
+            else:
+                st.write("**🏢 Sample Companies in this Cluster:**")
+                for company in cluster_info['cluster_companies'][:3]:
+                    st.write(f"• **{company['name']}**")
+                    st.caption(f"Keywords: {', '.join(company['keywords'])}")
 
     def render_clustering_analysis(self):
         """Enhanced clustering analysis tab with real data support"""
@@ -1471,12 +1609,12 @@ class FullFlowApp:
             col1, col2 = st.columns(2)
             
             with col1:
-                st.image(viz_path, caption="Multi-Metric Performance Analysis", use_column_width=True)
+                st.image(viz_path, caption="Multi-Metric Performance Analysis", use_container_width=True)
             
             with col2:
                 ranking_table_path = viz_path.replace('.png', '_ranking_table.png')
                 if os.path.exists(ranking_table_path):
-                    st.image(ranking_table_path, caption="Top Configurations Ranking Table", use_column_width=True)
+                    st.image(ranking_table_path, caption="Top Configurations Ranking Table", use_container_width=True)
         
         # Cluster distribution analysis
         if clustering_analyzer.cluster_assignments is not None and len(clustering_analyzer.cluster_assignments) > 0:

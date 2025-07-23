@@ -114,7 +114,13 @@ def display_clustering_summary(analyzer: CompanyClusteringAnalyzer, country: str
     
     print(f"📊 **Multi-Metric Ranking Results:**")
     print(f"   🔢 Best Number of Clusters: {analyzer.best_n_clusters}")
-    print(f"   🏆 Total Rank Score: {analyzer.best_score:.0f} (lower is better)")
+    # print(f"   🏆 Total Rank Score: {analyzer.best_score:.0f} (lower is better)")
+
+    if analyzer.best_score is not None:
+        print(f"   🏆 Total Rank Score: {analyzer.best_score:.0f} (lower is better)")
+    else:
+        print(f"   🏆 Total Rank Score: N/A (score is unavailable)")
+
     print(f"   🏢 Total Companies: {len(analyzer.company_ids)}")
     print(f"   📏 Embedding Dimension: {analyzer.embeddings_matrix.shape[1]}")
     

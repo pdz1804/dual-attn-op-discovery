@@ -118,6 +118,18 @@ Examples:
                         default=MAX_KEYWORDS_DISPLAY,
                         help=f'Maximum number of keywords to display in results (default: {MAX_KEYWORDS_DISPLAY})')
 
+    # new: choosing the model type for transformation from patent to product and vice versa
+    parser.add_argument('--model_type', 
+                    choices=['linear', 'mlp'],  # Add more later
+                    default='linear',
+                    help='Type of transformation model to train')
+    
+    # new: choosing the approximation method for matrix extraction
+    parser.add_argument('--approx_method', 
+                    choices=['sampling', 'polynomial', 'kernel'],  # Add more later
+                    default='sampling',
+                    help='Type of approximation method to use for matrix extraction')
+
     args = parser.parse_args()
     
     # Create configuration dictionary from arguments
@@ -135,7 +147,9 @@ Examples:
         'force_rebuild_clustering': args.force_rebuild_clustering,
         'enable_clustering': args.enable_clustering,
         'query': args.query,
-        'max_keywords_display': args.max_keywords_display
+        'max_keywords_display': args.max_keywords_display,
+        'model_type': args.model_type, # new
+        'approx_method': args.approx_method  # Default approximation method
     }
     
     set_seed(42)

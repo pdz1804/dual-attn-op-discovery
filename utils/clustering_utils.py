@@ -26,7 +26,6 @@ class CompanyClusteringAnalyzer:
     """
     Analyzes company embeddings using clustering algorithms
     """
-    
     def __init__(self, embedding_type='fasttext', country='US'):
         self.embedding_type = embedding_type
         self.country = country
@@ -540,7 +539,11 @@ class CompanyClusteringAnalyzer:
                 with open(self.file_paths['metadata'], 'r') as f:
                     metadata = json.load(f)
                     self.best_n_clusters = metadata.get('best_n_clusters')
-                    self.best_score = metadata.get('best_score')
+                    # old 
+                    # self.best_score = metadata.get('best_score')
+
+                    # new 
+                    self.best_score = metadata.get('best_score') or metadata.get('best_total_rank_score')
             
             logger.info(f"Loaded clustering results for {self.embedding_type} embeddings")
             return True
@@ -597,6 +600,97 @@ class CompanyClusteringAnalyzer:
             return nearest_cluster, min_distance
         
         return -1, float('inf')
+    
+    def get_top_k_companies_in_cluster(self, cluster_id: int, query_embedding: np.ndarray, k: int = 5, embeddings_dict: Dict = None) -> List[Dict]:
+        """
+        Get the top-k nearest companies in a specific cluster to a query embedding
+        
+        Args:
+            cluster_id: The cluster ID to search in
+            query_embedding: The query embedding to compare against
+            k: Number of top companies to return
+            embeddings_dict: Dictionary mapping company_id to embeddings (optional, uses stored embeddings if not provided)
+        
+        Returns:
+            List of dictionaries containing company information sorted by similarity to query
+        """
+        if self.cluster_assignments is None or self.company_data is None:
+            logger.warning("No cluster assignments or company data available")
+            return []
+        
+        # Get companies in this cluster
+        cluster_mask = self.cluster_assignments == cluster_id
+        cluster_company_indices = np.where(cluster_mask)[0]
+        
+        if len(cluster_company_indices) == 0:
+            logger.warning(f"No companies found in cluster {cluster_id}")
+            return []
+        
+        # Get company IDs and embeddings for this cluster
+        cluster_company_ids = [self.company_ids[i] for i in cluster_company_indices]
+        
+        # Get embeddings for companies in this cluster
+        if embeddings_dict is not None:
+            # Use provided embeddings dictionary
+            cluster_embeddings = []
+            valid_indices = []
+            valid_company_ids = []
+            
+            for idx, company_id in enumerate(cluster_company_ids):
+                if company_id in embeddings_dict:
+                    cluster_embeddings.append(embeddings_dict[company_id])
+                    valid_indices.append(cluster_company_indices[idx])
+                    valid_company_ids.append(company_id)
+            
+            if not cluster_embeddings:
+                logger.warning(f"No valid embeddings found for companies in cluster {cluster_id}")
+                return []
+            
+            cluster_embeddings = np.array(cluster_embeddings)
+            cluster_company_ids = valid_company_ids
+            cluster_company_indices = np.array(valid_indices)
+            
+        else:
+            # Use stored embeddings matrix
+            if self.embeddings_matrix is None:
+                logger.warning("No embeddings matrix available")
+                return []
+            
+            cluster_embeddings = self.embeddings_matrix[cluster_company_indices]
+        
+        # Calculate similarities to query
+        # Normalize embeddings for cosine similarity
+        query_norm = query_embedding / (np.linalg.norm(query_embedding) + 1e-8)
+        cluster_embeddings_norm = cluster_embeddings / (np.linalg.norm(cluster_embeddings, axis=1, keepdims=True) + 1e-8)
+        
+        # Compute cosine similarities
+        similarities = np.dot(cluster_embeddings_norm, query_norm)
+        
+        # Get top-k indices
+        top_k_indices = np.argsort(similarities)[-k:][::-1]  # Sort in descending order
+        
+        # Prepare results
+        results = []
+        for idx in top_k_indices:
+            company_id = cluster_company_ids[idx]
+            similarity_score = similarities[idx]
+            
+            # Get company information
+            company_info = self.company_data[self.company_data['hojin_id'].astype(str) == company_id]
+            
+            if not company_info.empty:
+                company_row = company_info.iloc[0]
+                result = {
+                    'company_id': company_id,
+                    'company_name': company_row.get('company_name', 'Unknown'),
+                    'similarity_score': float(similarity_score),
+                    'cluster_id': cluster_id,
+                    'keywords': company_row.get('company_keywords', ''),
+                    'rank_in_cluster': len(top_k_indices) - list(top_k_indices).index(idx)  # Rank within this cluster (1-based)
+                }
+                results.append(result)
+        
+        return results
     
     def visualize_clusters(self, save_path: str = None):
         """Create visualization of clusters using PCA"""
@@ -676,3 +770,5 @@ def run_clustering_analysis(embeddings_dict: Dict, company_df: pd.DataFrame,
         logger.info(f"Best total rank score: {evaluation_results['best_total_rank_score']:.4f}")
     
     return analyzer 
+
+

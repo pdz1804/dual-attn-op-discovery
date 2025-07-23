@@ -58,25 +58,101 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
                 if cluster_info and cluster_info.get('companies') is not None:
                     print(f"📁 Cluster {nearest_cluster} contains {cluster_info['n_companies']} companies")
                     
-                    # Show sample companies in this cluster
-                    print(f"🏢 Sample companies in Cluster {nearest_cluster}:")
-                    sample_companies = cluster_info['companies'].head(COMPANIES_PER_CLUSTER_DISPLAY)
-                    
-                    for idx, (_, company) in enumerate(sample_companies.iterrows()):
-                        company_name = company.get('company_name', 'Unknown')
-                        keywords = str(company.get('company_keywords', ''))
-                        
-                        # Show first few keywords
-                        if keywords and keywords != 'nan':
-                            keywords_list = keywords.split('|')[:KEYWORDS_PER_COMPANY_CLUSTER]
-                            keywords_display = ', '.join(keywords_list)
-                            if len(keywords.split('|')) > KEYWORDS_PER_COMPANY_CLUSTER:
-                                keywords_display += f" ... (+{len(keywords.split('|')) - KEYWORDS_PER_COMPANY_CLUSTER} more)"
+                    # Get top-k nearest companies in this cluster to the query
+                    try:
+                        # Load embeddings dictionary if available
+                        embeddings_dict = None
+                        if hasattr(clustering_analyzer, 'embeddings_matrix') and clustering_analyzer.embeddings_matrix is not None:
+                            # Use the embeddings from the clustering analyzer
+                            top_k_companies = clustering_analyzer.get_top_k_companies_in_cluster(
+                                cluster_id=nearest_cluster,
+                                query_embedding=query_embedding,
+                                k=TOP_K_COMPANIES_IN_CLUSTER,
+                                embeddings_dict=embeddings_dict  # Will use stored embeddings matrix
+                            )
+                            
+                            if top_k_companies:
+                                print(f"🏢 Top-{len(top_k_companies)} most relevant companies in Cluster {nearest_cluster}:")
+                                
+                                for company in top_k_companies:
+                                    company_name = company.get('company_name', 'Unknown')
+                                    similarity_score = company.get('similarity_score', 0.0)
+                                    rank_in_cluster = company.get('rank_in_cluster', 0)
+                                    keywords = str(company.get('keywords', ''))
+                                    
+                                    # Show first few keywords
+                                    if keywords and keywords != 'nan' and keywords != '':
+                                        keywords_list = keywords.split('|')[:KEYWORDS_PER_COMPANY_CLUSTER]
+                                        keywords_display = ', '.join(keywords_list)
+                                        if len(keywords.split('|')) > KEYWORDS_PER_COMPANY_CLUSTER:
+                                            keywords_display += f" ... (+{len(keywords.split('|')) - KEYWORDS_PER_COMPANY_CLUSTER} more)"
+                                    else:
+                                        keywords_display = "No keywords available"
+                                    
+                                    print(f"  {rank_in_cluster}. {company_name} (similarity: {similarity_score:.4f})")
+                                    print(f"     Keywords: {keywords_display}")
+                            else:
+                                # Fallback to sample companies if top-k retrieval fails
+                                print(f"🏢 Sample companies in Cluster {nearest_cluster}:")
+                                sample_companies = cluster_info['companies'].head(COMPANIES_PER_CLUSTER_DISPLAY)
+                                
+                                for idx, (_, company) in enumerate(sample_companies.iterrows()):
+                                    company_name = company.get('company_name', 'Unknown')
+                                    keywords = str(company.get('company_keywords', ''))
+                                    
+                                    # Show first few keywords
+                                    if keywords and keywords != 'nan':
+                                        keywords_list = keywords.split('|')[:KEYWORDS_PER_COMPANY_CLUSTER]
+                                        keywords_display = ', '.join(keywords_list)
+                                        if len(keywords.split('|')) > KEYWORDS_PER_COMPANY_CLUSTER:
+                                            keywords_display += f" ... (+{len(keywords.split('|')) - KEYWORDS_PER_COMPANY_CLUSTER} more)"
+                                    else:
+                                        keywords_display = "No keywords available"
+                                    
+                                    print(f"  {idx+1}. {company_name}")
+                                    print(f"     Keywords: {keywords_display}")
                         else:
-                            keywords_display = "No keywords available"
+                            # Fallback to sample companies if embeddings matrix not available
+                            print(f"🏢 Sample companies in Cluster {nearest_cluster}:")
+                            sample_companies = cluster_info['companies'].head(COMPANIES_PER_CLUSTER_DISPLAY)
+                            
+                            for idx, (_, company) in enumerate(sample_companies.iterrows()):
+                                company_name = company.get('company_name', 'Unknown')
+                                keywords = str(company.get('company_keywords', ''))
+                                
+                                # Show first few keywords
+                                if keywords and keywords != 'nan':
+                                    keywords_list = keywords.split('|')[:KEYWORDS_PER_COMPANY_CLUSTER]
+                                    keywords_display = ', '.join(keywords_list)
+                                    if len(keywords.split('|')) > KEYWORDS_PER_COMPANY_CLUSTER:
+                                        keywords_display += f" ... (+{len(keywords.split('|')) - KEYWORDS_PER_COMPANY_CLUSTER} more)"
+                                else:
+                                    keywords_display = "No keywords available"
+                                
+                                print(f"  {idx+1}. {company_name}")
+                                print(f"     Keywords: {keywords_display}")
+                    
+                    except Exception as e:
+                        logger.warning(f"Could not retrieve top-k companies, falling back to samples: {e}")
+                        # Fallback to sample companies
+                        print(f"🏢 Sample companies in Cluster {nearest_cluster}:")
+                        sample_companies = cluster_info['companies'].head(COMPANIES_PER_CLUSTER_DISPLAY)
                         
-                        print(f"  {idx+1}. {company_name}")
-                        print(f"     Keywords: {keywords_display}")
+                        for idx, (_, company) in enumerate(sample_companies.iterrows()):
+                            company_name = company.get('company_name', 'Unknown')
+                            keywords = str(company.get('company_keywords', ''))
+                            
+                            # Show first few keywords
+                            if keywords and keywords != 'nan':
+                                keywords_list = keywords.split('|')[:KEYWORDS_PER_COMPANY_CLUSTER]
+                                keywords_display = ', '.join(keywords_list)
+                                if len(keywords.split('|')) > KEYWORDS_PER_COMPANY_CLUSTER:
+                                    keywords_display += f" ... (+{len(keywords.split('|')) - KEYWORDS_PER_COMPANY_CLUSTER} more)"
+                            else:
+                                keywords_display = "No keywords available"
+                            
+                            print(f"  {idx+1}. {company_name}")
+                            print(f"     Keywords: {keywords_display}")
             else:
                 print(f"⚠️ Could not determine nearest cluster")
         except Exception as e:
@@ -160,15 +236,15 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
     print(f"\n✅ Query completed successfully using {method}")
     print(f"{'='*80}\n")
 
-def get_embedding_file_paths(embedding_type, country):
+def get_embedding_file_paths(embedding_type, country, model_type='linear', approx_method='sampling'):
     """Generate file paths based on embedding type and country"""
     paths = {
         'product_rep': os.path.join(DATA_DIR, f"{country}_{embedding_type}_product_rep.json"),
         'patent_rep': os.path.join(DATA_DIR, f"{country}_{embedding_type}_patent_rep.json"),
-        'model_A': os.path.join(MODEL_DIR, f"{country}_{embedding_type}_Patent2Product.pt"),
-        'model_B': os.path.join(MODEL_DIR, f"{country}_{embedding_type}_Product2Patent.pt"),
-        'matrix_A': os.path.join(MODEL_DIR, f"{country}_{embedding_type}_Patent2Product_transform.npy"),
-        'matrix_B': os.path.join(MODEL_DIR, f"{country}_{embedding_type}_Product2Patent_transform.npy"),
+        'model_A': os.path.join(MODEL_DIR, f"{country}_{embedding_type}_{model_type}_{approx_method}_Patent2Product.pt"),
+        'model_B': os.path.join(MODEL_DIR, f"{country}_{embedding_type}_{model_type}_{approx_method}_Product2Patent.pt"),
+        'matrix_A': os.path.join(MODEL_DIR, f"{country}_{embedding_type}_{model_type}_{approx_method}_Patent2Product_transform.npy"),
+        'matrix_B': os.path.join(MODEL_DIR, f"{country}_{embedding_type}_{model_type}_{approx_method}_Product2Patent_transform.npy"),
     }
     return paths
 
@@ -200,19 +276,21 @@ def initialize_embedder(config, testing=False):
         use_enhanced = True
         logger.info(f"Initialized sentence transformer: {model_name} (dim: {embedder.vector_size})")
     else:
-        # Use FastText
+        # Use FastText with EnhancedEmbedder wrapper for RAG compatibility
         country = config.get('country', 'US')
         if testing:
             ft_model_path = download_aligned_vec(country.lower(), DATA_DIR) if country != 'US' else FASTTEXT_VEC_ORI
         else:
             ft_model_path = download_aligned_vec(country.lower(), DATA_DIR) if country != 'US' else FASTTEXT_VEC
-        embedder = load_gensim_vec(ft_model_path)
-        use_enhanced = False
-        logger.info(f"Initialized FastText: {ft_model_path} (dim: {embedder.vector_size if hasattr(embedder, 'vector_size') else 300})")
+        
+        # Create EnhancedEmbedder wrapper for FastText to ensure RAG compatibility
+        embedder = create_embedder('fasttext', ft_model_path)
+        use_enhanced = True  # Now always using enhanced embedder for consistency
+        logger.info(f"Initialized FastText: {ft_model_path} (dim: {embedder.vector_size})")
     
     return embedder, use_enhanced
 
-def process_representations(country, product_df, patent_df, embedder, data_dir, use_enhanced_embedder=False):
+def process_representations(country, product_df, patent_df, embedder, data_dir, use_enhanced_embedder=True):
     """Process and return patent and product representations with support for enhanced embedder."""
     patent_rep, product_rep = {}, {}
     
@@ -221,6 +299,7 @@ def process_representations(country, product_df, patent_df, embedder, data_dir, 
         if use_enhanced_embedder:
             product_rep[row['Firm ID']] = embedder.encode_text(str(row['company_keywords']))
         else:
+            # Fallback for legacy compatibility
             product_rep[row['Firm ID']] = text_to_vector(str(row['company_keywords']), embedder)
     logger.info(f"[{country}] Prepared product representations for {len(product_rep)} firms")
 
@@ -236,6 +315,7 @@ def process_representations(country, product_df, patent_df, embedder, data_dir, 
         if use_enhanced_embedder:
             patent_rep[firm_id] = embedder.encode_text('|'.join(tokens))
         else:
+            # Fallback for legacy compatibility
             patent_rep[firm_id] = text_to_vector('|'.join(tokens), embedder)
         
         # Log details for the first two firms
@@ -259,6 +339,9 @@ def train_pipeline(config=None):
         }
     
     logger.info(f"Training configuration: {config}")
+    
+    model_type = config.get('model_type', 'linear')  # default to 'linear'
+    approx_method = config.get('approx_method', 'sampling')  # default to 'sampling'
 
     for country in COUNTRY:
         logger.info(f"[{country}] Training with {config['embedding_type']} embeddings...")
@@ -269,8 +352,8 @@ def train_pipeline(config=None):
         
         # Get embedding-specific file paths
         embedding_type = config['embedding_type']
-        file_paths = get_embedding_file_paths(embedding_type, country)
-        
+        file_paths = get_embedding_file_paths(embedding_type, country, model_type=model_type, approx_method=approx_method)
+
         # Load product embeddings
         product_df = pd.read_csv(EMBEDDINGS_OUTPUT)
         product_df['Firm ID'] = product_df['hojin_id'].astype(str)
@@ -315,7 +398,12 @@ def train_pipeline(config=None):
         logger.info(f"[{country}] Using embedding dimension: {actual_dim}")
 
         # Train Patent → Product (Model A) with correct dimension
-        model_A = Patent2Product(dim=actual_dim)
+        # old 
+        # model_A = Patent2Product(dim=actual_dim)
+        
+        # new  
+        from models.registry import MODEL_REGISTRY
+        model_A = MODEL_REGISTRY[model_type]['Patent2Product'](dim=actual_dim)
         
         X_train, X_val, Y_train, Y_val = train_test_split(X_patent, Y_product, test_size=0.2, random_state=42)
         logger.info(f"[{country}] Training Patent2Product model with {len(X_train)} training samples")
@@ -327,15 +415,21 @@ def train_pipeline(config=None):
         logger.info(f"[{country}] Finished training Patent2Product model")
         
         # Plot training history for Model A with embedding-specific name
-        plot_train_history_trans_matrix(hist_A, f"{embedding_type}_Patent2Product", country)
-        
+        plot_train_history_trans_matrix(hist_A, f"{embedding_type}_{model_type}_{approx_method}_Patent2Product", country)
+
         # Save model and extract matrix with embedding-specific names
-        A_matrix = extract_matrix(model_A)
+        A_matrix = extract_matrix(model_A, model_type=model_type, approx_method=approx_method)
         save_model_and_matrix(model_A, A_matrix, file_paths['model_A'])
         np.save(file_paths['matrix_A'], A_matrix)
 
         # Train Product → Patent (Model B) with correct dimension
-        model_B = Product2Patent(dim=actual_dim)
+        # old 
+        # model_B = Product2Patent(dim=actual_dim)
+        
+        # new 
+        from models.registry import MODEL_REGISTRY
+        model_B = MODEL_REGISTRY[model_type]['Product2Patent'](dim=actual_dim)
+        
         X_train, X_val, Y_train, Y_val = train_test_split(Y_product, X_patent, test_size=0.2, random_state=42)
         logger.info(f"[{country}] Training Product2Patent model with {len(X_train)} training samples")
         logger.info(f"[{country}] Validation size: {len(X_val)} samples")
@@ -346,15 +440,15 @@ def train_pipeline(config=None):
         logger.info(f"[{country}] Finished training Product2Patent model")
         
         # Plot training history for Model B with embedding-specific name
-        plot_train_history_trans_matrix(hist_B, f"{embedding_type}_Product2Patent", country)
-        
+        plot_train_history_trans_matrix(hist_B, f"{embedding_type}_{model_type}_{approx_method}_Product2Patent", country)
+
         # Save model and extract matrix with embedding-specific names
-        B_matrix = extract_matrix(model_B)
+        B_matrix = extract_matrix(model_B, model_type=model_type, approx_method=approx_method)
         save_model_and_matrix(model_B, B_matrix, file_paths['model_B'])
         np.save(file_paths['matrix_B'], B_matrix)
 
         # Export product embeddings with embedding-specific name
-        product_embeddings_file = os.path.join(DATA_DIR, f"{country}_{embedding_type}_Firm_Product_Keywords_Table_with_Vector.csv")
+        product_embeddings_file = os.path.join(DATA_DIR, f"{country}_{embedding_type}_{model_type}_{approx_method}_Firm_Product_Keywords_Table_with_Vector.csv")
         product_df['Product embedding vector'] = product_df['Firm ID'].apply(
             lambda fid: '|'.join(map(str, model_B(torch.tensor(patent_rep[fid], dtype=torch.float32)).detach().numpy())) if fid in patent_rep else ""
         )
@@ -431,14 +525,8 @@ def test_pipeline(config=None):
             query_embedding = None
             if clustering_analyzer is not None:
                 try:
-                    if hasattr(embedder, 'encode_text'):
-                        query_embedding = embedder.encode_text(query)
-                    else:
-                        # FastText embedder
-                        query_tokens = query.strip().split()
-                        token_vecs = [embedder[w] for w in query_tokens if w in embedder]
-                        if token_vecs:
-                            query_embedding = np.mean(token_vecs, axis=0)
+                    # Always use encode_text since we now use EnhancedEmbedder consistently
+                    query_embedding = embedder.encode_text(query)
                 except Exception as e:
                     logger.warning(f"Could not compute query embedding: {e}")
             
@@ -466,7 +554,7 @@ def test_pipeline(config=None):
             
             # Get embedding-specific file paths
             embedding_type = config['embedding_type']
-            file_paths = get_embedding_file_paths(embedding_type, country)
+            file_paths = get_embedding_file_paths(embedding_type, country, model_type=config.get('model_type', 'linear'), approx_method=config.get('approx_method', 'sampling'))
 
             # Load product data
             product_df = pd.read_csv(EMBEDDINGS_OUTPUT)
@@ -554,8 +642,15 @@ def test_pipeline(config=None):
             B_matrix = np.load(file_paths['matrix_B'])
 
             # Load models for nonlinear query with correct dimension
-            model_A = Patent2Product(dim=embedding_dim)
-            model_B = Product2Patent(dim=embedding_dim)
+            # old 
+            # model_A = Patent2Product(dim=embedding_dim)
+            # model_B = Product2Patent(dim=embedding_dim)
+            
+            # new 
+            from models.registry import MODEL_REGISTRY
+            model_type = config.get('model_type', 'linear')
+            model_A = MODEL_REGISTRY[model_type]['Patent2Product'](dim=embedding_dim)
+            model_B = MODEL_REGISTRY[model_type]['Product2Patent'](dim=embedding_dim)
             
             if os.path.exists(file_paths['model_A']) and os.path.exists(file_paths['model_B']):
                 model_A.load_state_dict(torch.load(file_paths['model_A']))
@@ -689,7 +784,9 @@ def chat_pipeline(config=None):
             'sentence_transformer_model': SENTENCE_TRANSFORMER_MODEL,
             'use_rag': USE_RAG,
             'rag_use_external_summaries': RAG_USE_EXTERNAL_SUMMARIES,
-            'rag_top_k': RAG_TOP_K
+            'rag_top_k': RAG_TOP_K,
+            'approx_method': 'sampling',
+            'model_type': 'linear'
         }
     
     logger.info(f"Chat configuration: {config}")
@@ -747,14 +844,8 @@ def chat_pipeline(config=None):
             query_embedding = None
             if clustering_analyzer is not None:
                 try:
-                    if hasattr(embedder, 'encode_text'):
-                        query_embedding = embedder.encode_text(user_input)
-                    else:
-                        # FastText embedder
-                        query_tokens = user_input.strip().split()
-                        token_vecs = [embedder[w] for w in query_tokens if w in embedder]
-                        if token_vecs:
-                            query_embedding = np.mean(token_vecs, axis=0)
+                    # Always use encode_text since we now use EnhancedEmbedder consistently
+                    query_embedding = embedder.encode_text(user_input)
                 except Exception as e:
                     logger.warning(f"Could not compute query embedding: {e}")
             
@@ -782,7 +873,7 @@ def chat_pipeline(config=None):
             
             # Get embedding-specific file paths
             embedding_type = config['embedding_type']
-            file_paths = get_embedding_file_paths(embedding_type, country)
+            file_paths = get_embedding_file_paths(embedding_type, country, model_type=config.get('model_type', 'linear'), approx_method=config.get('approx_method', 'sampling'))
 
             # Load data (same as test_pipeline)
             product_df = pd.read_csv(EMBEDDINGS_OUTPUT)

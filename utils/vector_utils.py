@@ -51,6 +51,7 @@ class EnhancedEmbedder:
             model_name = model_name_or_path or 'all-MiniLM-L6-v2'
             logger.info(f"Loading sentence transformer: {model_name}")
             self.model = SentenceTransformer(model_name)
+            
             # Get embedding dimension by encoding a sample text
             sample_embedding = self.model.encode("sample text")
             self.vector_size = len(sample_embedding)
@@ -69,6 +70,7 @@ class EnhancedEmbedder:
     
     def encode_texts(self, texts: List[str]) -> np.ndarray:
         """
+        NEED RECHECK
         Encode multiple texts into embeddings
         """
         if self.embedding_type == 'sentence_transformer':

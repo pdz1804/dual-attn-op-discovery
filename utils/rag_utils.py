@@ -24,7 +24,10 @@ class RAGProcessor:
         self.db_path = db_path or RAG_VECTOR_DB_DIR
         self.client = None
         self.collection = None
-        self.collection_name = "company_documents"
+        
+        # Make collection name embedding-type specific to avoid dimension conflicts
+        embedding_type = getattr(embedder, 'embedding_type', 'unknown')
+        self.collection_name = f"company_documents_{embedding_type}"
         
         # Ensure directory exists
         os.makedirs(self.db_path, exist_ok=True)
@@ -80,10 +83,35 @@ class RAGProcessor:
                 existing_collection = self.client.get_collection(name=self.collection_name)
                 if not force_rebuild:
                     logger.info("Loading existing ChromaDB collection...")
-                    self.collection = existing_collection
-                    count = self.collection.count()
-                    logger.info(f"Loaded existing collection with {count} documents")
-                    return
+                    
+                    # Check embedding dimension compatibility
+                    try:
+                        # Test query to check if dimensions match
+                        test_text = "test compatibility"
+                        test_embedding = self.embedder.encode_text(test_text)
+                        current_dimension = len(test_embedding)
+                        
+                        # Try a small query to see if dimensions match
+                        test_results = existing_collection.query(
+                            query_embeddings=[test_embedding.tolist()],
+                            n_results=1,
+                            include=['distances']
+                        )
+                        
+                        self.collection = existing_collection
+                        count = self.collection.count()
+                        logger.info(f"Loaded existing collection with {count} documents (dimension: {current_dimension})")
+                        return
+                        
+                    except Exception as dim_error:
+                        if "expecting embedding with dimension" in str(dim_error):
+                            logger.warning(f"Embedding dimension mismatch detected: {dim_error}")
+                            logger.info("Rebuilding RAG database with current embedding type...")
+                            # Delete existing collection and rebuild
+                            self.client.delete_collection(name=self.collection_name)
+                            logger.info("Deleted incompatible collection for rebuild")
+                        else:
+                            raise dim_error
                 else:
                     # Delete existing collection for rebuild
                     self.client.delete_collection(name=self.collection_name)
@@ -153,6 +181,9 @@ class RAGProcessor:
         try:
             # Generate query embedding
             query_embedding = self.embedder.encode_text(query)
+            query_dimension = len(query_embedding)
+            
+            logger.debug(f"Query embedding dimension: {query_dimension}")
             
             # Search using ChromaDB
             results = self.collection.query(
@@ -170,6 +201,8 @@ class RAGProcessor:
                 
                 for doc, metadata, distance in zip(documents, metadatas, distances):
                     # Convert distance to similarity score (ChromaDB uses L2 distance)
+                    # The following formula does not equivalent to cosine similarity, but rather a simple transformation
+                    # We call that it is a similarity heuristic / inverse distance similarity
                     # Similarity = 1 / (1 + distance)
                     similarity_score = 1.0 / (1.0 + distance)
                     
