@@ -310,42 +310,6 @@ The clustering analysis provides:
 - **🏢 Market Segmentation**: Company grouping by technology domains
 - **🔍 Query-Cluster Matching**: Find nearest clusters for queries
 
-## 🚨 Troubleshooting
-
-### Common Issues
-
-**"No clustering results found"**
-```bash
-# Run clustering pipeline first
-python main.py --pipeline clustering --embedding_type fasttext --enable_clustering
-```
-
-**"RAG vector database not found"**
-```bash
-# Build RAG database
-python main.py --pipeline patent_product --mode train --use_rag --embedding_type fasttext
-```
-
-**"Model files not found"**
-```bash
-# Train models first
-python main.py --pipeline patent_product --mode train --embedding_type fasttext
-```
-
-**"--mode is required for patent_product pipeline"**
-```bash
-# Always specify mode for patent_product pipeline
-python main.py --pipeline patent_product --mode train    # or test, chat
-```
-
-**Memory issues with Sentence Transformers**
-```bash
-# Use FastText instead
---embedding_type fasttext
-
-# Or reduce batch size in configs/hyperparams.py
-BATCH_SIZE = 32  # Reduce from default
-```
 
 ## 🏗️ Architecture Overview
 
@@ -427,42 +391,20 @@ python main.py --pipeline rag_only --embedding_type sentence_transformer --sente
 - **Training Phase**: Build models, databases, clustering (no queries needed)
 - **Testing Phase**: Use trained components with actual queries
 
-## 📈 Monitoring and Visualization
-
-### View Clustering Plots
-```bash
-# Plots are automatically saved to: data/output/img/
-# - clustering_performance_analysis_[embedding_type]_[country].png
-# - clustering_performance_analysis_[embedding_type]_[country]_ranking_table.png
-```
-
-### Monitor Logs
-```bash
-# Check main log file
-tail -f pdzttb.log
-```
-
-### Launch Streamlit for Visual Monitoring
-```bash
-streamlit run streamlit_app.py
-```
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests
-5. Submit a pull request
-
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the **MIT License**. See [`LICENSE`](./LICENSE) for details.
 
-## 🙏 Acknowledgments
+## 👥 Authors
 
-- FastText team for word embeddings
-- Sentence Transformers for semantic embeddings
-- ChromaDB for vector database capabilities
-- Streamlit for the web interface framework
+This project was developed by:
+- **[Nguyen Quang Phu (pdz1804)](https://github.com/pdz1804)** and Tieu Tri Bang.
+
+## 📞 Support
+
+For questions, issues, or contributions:
+- 🐛 **Issues**: [GitHub Issues](https://github.com/pdz1804/dual-attn-op-discovery/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/pdz1804/dual-attn-op-discovery/discussions)
+- 📧 **Email**: [quangphunguyen1804@gmail.com](mailto:quangphunguyen1804@gmail.com)
+
 
