@@ -11,6 +11,26 @@ FullFlow is a comprehensive system that provides two main approaches for patent-
 
 Both flows support **FastText** and **Sentence Transformer** embeddings, with advanced clustering analysis for market insights.
 
+## 🔍 Innovation Discovery System Overview
+
+<details>
+<summary><strong>Toggle to view Web Scraping Process</strong></summary>
+<img src="imgs/IDS_webscraping.png" alt="Web Scraping Process" style="max-width: 100%;">
+<p><em>This diagram illustrates how HTML pages are extracted from the company's website and Wayback Machine snapshots for further analysis.</em></p>
+</details>
+
+<details>
+<summary><strong>Toggle to view Dual Attention Model</strong></summary>
+<img src="imgs/IDS_Dual Attention Model.png" alt="Dual Attention Model" style="max-width: 100%;">
+<p><em>This figure demonstrates the dual attention mechanism that captures both word-level and page-level context to generate firm representations.</em></p>
+</details>
+
+<details>
+<summary><strong>Toggle to view Transformation Matrix Pipeline</strong></summary>
+<img src="imgs/IDS_Approach01_Transformation Matrix.png" alt="Transformation Matrix Pipeline" style="max-width: 100%;">
+<p><em>This shows the pipeline for transforming patents and firm keywords into vector spaces and matching them for discovery.</em></p>
+</details>
+
 ## 🛠️ Installation
 
 ```bash
