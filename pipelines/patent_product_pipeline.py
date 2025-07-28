@@ -503,9 +503,11 @@ def test_pipeline(config=None):
         if ENABLE_CLUSTERING:
             try:
                 from pipelines.clustering_pipeline import load_clustering_analyzer
-                clustering_analyzer = load_clustering_analyzer(config.get('embedding_type', 'fasttext'))
+                # Use the same country parameter as in config (default to 'US' if not specified)
+                country = config.get('countries', ['US'])[0] if config.get('countries') else 'US'
+                clustering_analyzer = load_clustering_analyzer(config.get('embedding_type', 'fasttext'), country)
                 if clustering_analyzer:
-                    logger.info("Loaded clustering analyzer for enhanced results display")
+                    logger.info(f"Loaded clustering analyzer for enhanced results display (country: {country})")
             except Exception as e:
                 logger.warning(f"Could not load clustering analyzer: {e}")
         
@@ -813,9 +815,11 @@ def chat_pipeline(config=None):
         if ENABLE_CLUSTERING:
             try:
                 from pipelines.clustering_pipeline import load_clustering_analyzer
-                clustering_analyzer = load_clustering_analyzer(config.get('embedding_type', 'fasttext'))
+                # Use the same country parameter as in config (default to 'US' if not specified)
+                country = config.get('countries', ['US'])[0] if config.get('countries') else 'US'
+                clustering_analyzer = load_clustering_analyzer(config.get('embedding_type', 'fasttext'), country)
                 if clustering_analyzer:
-                    logger.info("Loaded clustering analyzer for enhanced results display")
+                    logger.info(f"Loaded clustering analyzer for enhanced results display (country: {country})")
             except Exception as e:
                 logger.warning(f"Could not load clustering analyzer: {e}")
         

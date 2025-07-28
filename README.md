@@ -35,7 +35,7 @@ Both flows support **FastText** and **Sentence Transformer** embeddings, with ad
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/pdz1804/dual-attn-op-discovery.git FullFlow
 cd FullFlow
 
 # Create virtual environment

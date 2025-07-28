@@ -148,8 +148,9 @@ Examples:
         'enable_clustering': args.enable_clustering,
         'query': args.query,
         'max_keywords_display': args.max_keywords_display,
-        'model_type': args.model_type, # new
-        'approx_method': args.approx_method  # Default approximation method
+        'model_type': args.model_type,          # New
+        'approx_method': args.approx_method,    # Default approximation method
+        'countries': COUNTRY                    # Add countries for consistent clustering
     }
     
     set_seed(42)
@@ -186,4 +187,6 @@ Examples:
 if __name__ == "__main__":
     main()
     exit(1)  # Exit after running the pipeline
+    
+    
     

@@ -48,7 +48,10 @@ class CompanyClusteringAnalyzer:
         logger.info(f"Preparing data for clustering analysis...")
         
         # Filter company data to only include companies with embeddings
-        valid_company_ids = set(embeddings_dict.keys()) & set(company_df['hojin_id'].astype(str))
+        # old: not deterministic due to set intersection
+        # valid_company_ids = set(embeddings_dict.keys()) & set(company_df['hojin_id'].astype(str))
+        # new: deterministic by sorting
+        valid_company_ids = sorted(set(embeddings_dict.keys()) & set(company_df['hojin_id'].astype(str)))
         
         self.company_data = company_df[company_df['hojin_id'].astype(str).isin(valid_company_ids)].copy()
         self.company_data['hojin_id'] = self.company_data['hojin_id'].astype(str)
@@ -666,8 +669,20 @@ class CompanyClusteringAnalyzer:
         # Compute cosine similarities
         similarities = np.dot(cluster_embeddings_norm, query_norm)
         
-        # Get top-k indices
-        top_k_indices = np.argsort(similarities)[-k:][::-1]  # Sort in descending order
+        # Create deterministic sorting with tie-breaking using company_id
+        # This ensures consistent results across multiple runs when similarity scores are identical
+        similarity_company_pairs = []
+        for idx, similarity in enumerate(similarities):
+            company_id = cluster_company_ids[idx]
+            # Use (negative_similarity, company_id) for deterministic descending sort
+            # Negative similarity for descending order, company_id for tie-breaking
+            similarity_company_pairs.append((idx, -float(similarity), str(company_id)))
+        
+        # Sort deterministically: first by similarity (descending), then by company_id (ascending) for tie-breaking
+        similarity_company_pairs.sort(key=lambda x: (x[1], x[2]))
+        
+        # Get top-k indices (first k after sorting)
+        top_k_indices = [pair[0] for pair in similarity_company_pairs[:k]]
         
         # Prepare results
         results = []

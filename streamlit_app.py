@@ -334,7 +334,11 @@ class FullFlowApp:
             'force_rebuild_clustering': force_rebuild_clustering,
             'max_keywords_display': max_keywords_display,
             'model_type': model_type,
-            'approx_method': approx_method
+            'approx_method': approx_method,
+            # Add display configuration constants from hyperparams
+            'keywords_per_company_cluster': KEYWORDS_PER_COMPANY_CLUSTER,
+            'companies_per_cluster_display': COMPANIES_PER_CLUSTER_DISPLAY, 
+            'top_k_companies_in_cluster': TOP_K_COMPANIES_IN_CLUSTER
         }
         
         st.session_state.config = config
@@ -775,10 +779,12 @@ class FullFlowApp:
                                 # Get top-k most relevant companies from cluster instead of samples
                                 try:
                                     if hasattr(clustering_analyzer, 'embeddings_matrix') and clustering_analyzer.embeddings_matrix is not None:
+                                        # Use config value for number of companies to show
+                                        top_k_companies_count = config.get('top_k_companies_in_cluster', TOP_K_COMPANIES_IN_CLUSTER)
                                         top_k_companies = clustering_analyzer.get_top_k_companies_in_cluster(
                                             cluster_id=cluster_id,
                                             query_embedding=query_embedding,
-                                            k=3,  # Show top 3 companies
+                                            k=top_k_companies_count,
                                             embeddings_dict=None  # Use stored embeddings matrix
                                         )
                                         
@@ -1137,10 +1143,12 @@ class FullFlowApp:
                             # Get top-k most relevant companies from cluster instead of samples
                             try:
                                 if hasattr(clustering_analyzer, 'embeddings_matrix') and clustering_analyzer.embeddings_matrix is not None:
+                                    # Use config value for number of companies to show
+                                    top_k_companies_count = config.get('top_k_companies_in_cluster', TOP_K_COMPANIES_IN_CLUSTER)
                                     top_k_companies = clustering_analyzer.get_top_k_companies_in_cluster(
                                         cluster_id=cluster_id,
                                         query_embedding=query_embedding,
-                                        k=3,  # Show top 3 companies
+                                        k=top_k_companies_count,
                                         embeddings_dict=None  # Use stored embeddings matrix
                                     )
                                     
@@ -1152,7 +1160,7 @@ class FullFlowApp:
                                             
                                             # Parse keywords
                                             if keywords_str and keywords_str != 'nan' and keywords_str != '':
-                                                keywords = keywords_str.split('|')[:3]
+                                                keywords = keywords_str.split('|')[:10]
                                             else:
                                                 keywords = []
                                             
@@ -1286,7 +1294,7 @@ class FullFlowApp:
                 **🏢 Companies in Cluster:** {cluster_info['cluster_size']}
                 """)
                 
-                # Top-k most relevant companies from cluster
+                # Top-k most relevant companies from cluster with enhanced display
                 if cluster_info.get('cluster_companies'):
                     # Check if we have similarity scores to determine display style
                     has_similarity_scores = any(company.get('similarity_score') is not None for company in cluster_info['cluster_companies'])
@@ -1296,20 +1304,72 @@ class FullFlowApp:
                     else:
                         st.markdown("**🏢 Sample Companies in this Cluster:**")
                     
-                    cols = st.columns(len(cluster_info['cluster_companies']))
+                    # Use config values instead of hardcoded constants
+                    keywords_per_company = config.get('max_keywords_display', MAX_KEYWORDS_DISPLAY)
+                    # For cluster display, use fewer keywords to avoid clutter
+                    cluster_keywords_limit = min(keywords_per_company // 2, 15)
+                    
+                    # Display cluster companies with enhanced formatting similar to main results
                     for i, company in enumerate(cluster_info['cluster_companies']):
-                        with cols[i]:
-                            # Show rank and similarity if available
-                            if company.get('similarity_score') is not None:
-                                rank = company.get('rank_in_cluster', i+1)
-                                similarity = company.get('similarity_score', 0.0)
-                                st.markdown(f"**#{rank}. {company['name']}**")
-                                st.caption(f"Similarity: {similarity:.3f}")
-                            else:
-                                st.markdown(f"**{company['name']}**")
+                        company_name = company.get('name', 'Unknown Company')
+                        keywords = company.get('keywords', [])
+                        
+                        # Determine display elements based on available data
+                        if company.get('similarity_score') is not None:
+                            rank = company.get('rank_in_cluster', i+1) 
+                            similarity = company.get('similarity_score', 0.0)
                             
-                            keywords = ', '.join(company['keywords'][:KEYWORDS_PER_COMPANY_CLUSTER])
-                            st.caption(f"Keywords: {keywords}")
+                            # Color-coded expansion based on similarity (similar to main results)
+                            score_color = "🟢" if similarity > 0.8 else "🟡" if similarity > 0.6 else "🔴"
+                            expander_title = f"{score_color} **#{rank}**: {company_name} (Similarity: {similarity:.3f})"
+                        else:
+                            score_color = "🔵"
+                            expander_title = f"{score_color} **{i+1}**: {company_name}"
+                        
+                        # Create expandable section (expanded for first 2 companies)
+                        with st.expander(expander_title, expanded=i < 2):
+                            
+                            # Company details in organized columns (similar to main results)
+                            detail_col1, detail_col2 = st.columns([3, 2])
+                            
+                            with detail_col1:
+                                st.markdown("**🏢 Cluster Company Information:**")
+                                st.write(f"• **Company Name:** {company_name}")
+                                if company.get('similarity_score') is not None:
+                                    st.write(f"• **Similarity to Query:** {similarity:.4f}")
+                                    st.write(f"• **Rank in Cluster:** #{rank}")
+                                st.write(f"• **Position:** Company in nearest cluster")
+                            
+                            with detail_col2:
+                                st.markdown("**🏷️ Company Keywords:**")
+                                if keywords:
+                                    # Display keywords as tags (similar to main results)
+                                    keyword_tags = []
+                                    displayed_keywords = keywords[:cluster_keywords_limit]
+                                    
+                                    for keyword in displayed_keywords:
+                                        keyword_tags.append(f"`{keyword}`")
+                                    
+                                    # Show keywords in rows for better readability
+                                    keywords_text = " ".join(keyword_tags)
+                                    st.markdown(keywords_text)
+                                    
+                                    # Show count if more keywords exist
+                                    if len(keywords) > cluster_keywords_limit:
+                                        st.caption(f"... and {len(keywords) - cluster_keywords_limit} more keywords")
+                                        
+                                        # Show additional keywords in an expander
+                                        with st.expander(f"Show all {len(keywords)} keywords", expanded=False):
+                                            all_keyword_tags = []
+                                            for keyword in keywords:
+                                                all_keyword_tags.append(f"`{keyword}`")
+                                            st.markdown(" ".join(all_keyword_tags))
+                                else:
+                                    st.caption("No keywords available")
+                            
+                            # Add a subtle divider between companies
+                            if i < len(cluster_info['cluster_companies']) - 1:
+                                st.divider()
         
         # Company results with enhanced display
         if results.get('results'):
