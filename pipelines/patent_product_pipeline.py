@@ -9,6 +9,7 @@ from tqdm import tqdm
 import torch
 from ast import literal_eval
 from sklearn.model_selection import train_test_split
+from datetime import datetime
 
 from configs.paths import *
 from configs.hyperparams import *
@@ -38,11 +39,11 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
         config: Configuration dictionary with display settings
     """
     print(f"\n{'='*80}")
-    print(f"🔍 QUERY RESULTS")
+    print(f"QUERY RESULTS")
     print(f"{'='*80}")
-    print(f"📝 Query: \"{query}\"")
-    print(f"🔬 Method: {method}")
-    print(f"📊 Total Results: {len(results)}")
+    print(f"Query: \"{query}\"")
+    print(f"Method: {method}")
+    print(f"Total Results: {len(results)}")
     
     # Show cluster information if available
     if clustering_analyzer is not None and query_embedding is not None:
@@ -50,13 +51,13 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
             nearest_cluster, cluster_distance = clustering_analyzer.find_nearest_cluster(query_embedding)
             
             if nearest_cluster != -1:
-                print(f"🎯 Nearest Cluster: {nearest_cluster} (distance: {cluster_distance:.4f})")
+                print(f"Nearest Cluster: {nearest_cluster} (distance: {cluster_distance:.4f})")
                 
                 # Get cluster information
                 cluster_info = clustering_analyzer.get_cluster_info(nearest_cluster)
                 
                 if cluster_info and cluster_info.get('companies') is not None:
-                    print(f"📁 Cluster {nearest_cluster} contains {cluster_info['n_companies']} companies")
+                    print(f"Cluster {nearest_cluster} contains {cluster_info['n_companies']} companies")
                     
                     # Get top-k nearest companies in this cluster to the query
                     try:
@@ -72,7 +73,7 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
                             )
                             
                             if top_k_companies:
-                                print(f"🏢 Top-{len(top_k_companies)} most relevant companies in Cluster {nearest_cluster}:")
+                                print(f"Top-{len(top_k_companies)} most relevant companies in Cluster {nearest_cluster}:")
                                 
                                 for company in top_k_companies:
                                     company_name = company.get('company_name', 'Unknown')
@@ -93,7 +94,7 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
                                     print(f"     Keywords: {keywords_display}")
                             else:
                                 # Fallback to sample companies if top-k retrieval fails
-                                print(f"🏢 Sample companies in Cluster {nearest_cluster}:")
+                                print(f"Sample companies in Cluster {nearest_cluster}:")
                                 sample_companies = cluster_info['companies'].head(COMPANIES_PER_CLUSTER_DISPLAY)
                                 
                                 for idx, (_, company) in enumerate(sample_companies.iterrows()):
@@ -113,7 +114,7 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
                                     print(f"     Keywords: {keywords_display}")
                         else:
                             # Fallback to sample companies if embeddings matrix not available
-                            print(f"🏢 Sample companies in Cluster {nearest_cluster}:")
+                            print(f"Sample companies in Cluster {nearest_cluster}:")
                             sample_companies = cluster_info['companies'].head(COMPANIES_PER_CLUSTER_DISPLAY)
                             
                             for idx, (_, company) in enumerate(sample_companies.iterrows()):
@@ -135,7 +136,7 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
                     except Exception as e:
                         logger.warning(f"Could not retrieve top-k companies, falling back to samples: {e}")
                         # Fallback to sample companies
-                        print(f"🏢 Sample companies in Cluster {nearest_cluster}:")
+                        print(f"Sample companies in Cluster {nearest_cluster}:")
                         sample_companies = cluster_info['companies'].head(COMPANIES_PER_CLUSTER_DISPLAY)
                         
                         for idx, (_, company) in enumerate(sample_companies.iterrows()):
@@ -154,7 +155,7 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
                             print(f"  {idx+1}. {company_name}")
                             print(f"     Keywords: {keywords_display}")
             else:
-                print(f"⚠️ Could not determine nearest cluster")
+                print(f"Could not determine nearest cluster")
         except Exception as e:
             logger.warning(f"Could not determine cluster information: {e}")
     
@@ -165,9 +166,19 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
         company_name = result.get('company_name', result.get('firm_name', 'Unknown'))
         score = result.get('relevance_score', result.get('cosine_similarity', result.get('score', 0)))
         
-        print(f"\n🏢 RANK {i+1}: {company_name}")
-        print(f"   📍 Company ID: {company_id}")
-        print(f"   ⭐ Relevance Score: {score:.4f}")
+        print(f"\nRANK {i+1}: {company_name}")
+        print(f"    Company ID: {company_id}")
+        
+        # Show source information if available
+        source = result.get('source', 'unknown')
+        if source == 'transformation_matrix':
+            print(f"    Source: Transformation Matrix Top-K")
+        elif source == 'nearest_cluster':
+            print(f"    Source: Nearest Cluster")
+        else:
+            print(f"    Source: {source.title()}")
+        
+        print(f"    Relevance Score: {score:.4f}")
         
         # Show cluster membership if available
         if clustering_analyzer is not None and clustering_analyzer.cluster_assignments is not None:
@@ -177,9 +188,9 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
                     company_idx = clustering_analyzer.company_ids.index(company_id)
                     company_cluster = clustering_analyzer.cluster_assignments[company_idx]
                     if company_cluster != -1:
-                        print(f"   🎯 Cluster: {company_cluster}")
+                        print(f"    Cluster: {company_cluster}")
                     else:
-                        print(f"   🎯 Cluster: Noise/Outlier")
+                        print(f"    Cluster: Noise/Outlier")
             except Exception as e:
                 logger.debug(f"Could not determine cluster for company {company_id}: {e}")
         
@@ -199,7 +210,7 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
                 pass
         
         if keywords:
-            print(f"   🏷️  Company Keywords ({len(keywords)} total):")
+            print(f"    Company Keywords ({len(keywords)} total):")
             # Get max keywords display from config or use default
             max_keywords = config.get('max_keywords_display', MAX_KEYWORDS_DISPLAY) if config else MAX_KEYWORDS_DISPLAY
             displayed_keywords = keywords[:max_keywords]
@@ -207,17 +218,17 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
             if len(keywords) > max_keywords:
                 print(f"      ... and {len(keywords) - max_keywords} more keywords")
         else:
-            print(f"   🏷️  Company Keywords: Not available")
+            print(f"    Company Keywords: Not available")
         
         # Show sample patents if available
         if firm_patent_ids and patent_text_map and company_id in firm_patent_ids:
             patent_ids = firm_patent_ids[company_id]
             total_patents = len(patent_ids)
-            print(f"   📄 Patents: {total_patents} total")
+            print(f"    Patents: {total_patents} total")
             
             if total_patents > 0:
                 sample_patents = patent_ids[:max_patents_per_company]
-                print(f"   📋 Sample Patents (showing {len(sample_patents)}/{total_patents}):")
+                print(f"    Sample Patents (showing {len(sample_patents)}/{total_patents}):")
                 
                 for j, patent_id in enumerate(sample_patents):
                     abstract = patent_text_map.get(patent_id, "Abstract not available")
@@ -229,11 +240,265 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
                 if total_patents > max_patents_per_company:
                     print(f"      ... and {total_patents - max_patents_per_company} more patents")
         else:
-            print(f"   📄 Patents: Information not available")
+            print(f"    Patents: Information not available")
+        
+        # Show product suggestions if enabled
+        if config and config.get('enable_product_suggestions', False):
+            try:
+                # Import product suggestion pipeline
+                from pipelines.product_suggestion_pipeline import PatentProductSuggester, convert_pipeline_results_to_suggestions_format
+                
+                # Convert current result to format expected by product suggester
+                company_data_for_suggestions = [{
+                    'hojinid': company_id,
+                    'name': company_name,
+                    'keywords': keywords if keywords else [],
+                    'patents': []
+                }]
+                
+                # Add patent data if available
+                if firm_patent_ids and patent_text_map and company_id in firm_patent_ids:
+                    patent_ids = firm_patent_ids[company_id]
+                    max_patents_individual = 20  # Increased to 20 patents for individual display
+                    patents_to_add = patent_ids[:max_patents_individual]
+                    
+                    for patent_id in patents_to_add:
+                        if patent_id in patent_text_map:
+                            company_data_for_suggestions[0]['patents'].append({
+                                'id': patent_id,  # Use 'id' key for product suggester
+                                'patent_id': patent_id,
+                                'abstract': patent_text_map[patent_id]
+                            })
+                    
+                    if len(patent_ids) > max_patents_individual:
+                        logger.info(f"Individual processing - {company_name}: Limited to {max_patents_individual}/{len(patent_ids)} patents")
+                    
+                                    # Debug: Show sample patent IDs being passed for individual processing (disabled)
+                # if len(patents_to_add) > 0:
+                #     sample_ids = patents_to_add[:3]  # Show first 3 IDs
+                #     logger.info(f"Debug - Sample patent IDs for individual processing {company_name}: {sample_ids}")
+                
+                # Initialize product suggester with config
+                suggestion_config = {
+                    'similarity_threshold': config.get('product_similarity_threshold', PRODUCT_SUGGESTION_CONFIG['similarity_threshold']),
+                    'top_k_suggestions': PRODUCT_SUGGESTION_CONFIG['top_k_suggestions'],
+                    'enable_openai_enhance': config.get('enable_openai_enhance', PRODUCT_SUGGESTION_CONFIG['enable_openai_enhance']),
+                    'debug_enabled': PRODUCT_SUGGESTION_CONFIG['debug_enabled']
+                }
+                
+                suggester = PatentProductSuggester(suggestion_config)
+                
+                # Generate product suggestions
+                suggestion_results = suggester.suggest_products(query, company_data_for_suggestions)
+                
+                if suggestion_results['results']:
+                    company_result = suggestion_results['results'][0]
+                    if company_result['products']:
+                        print(f"Product Suggestions:")
+                        # Show patent processing stats
+                        if 'patent_stats' in company_result:
+                            stats = company_result['patent_stats']
+                            print(f"       Patent Processing: {stats['full_abstracts_used']}/{stats['total_patents']} full abstracts used (limited to top-20 patents)")
+                        
+                        for j, product in enumerate(company_result['products'], 1):
+                            product_name = product['product_name']
+                            original_name = product.get('original_name')
+                            score = product['score']
+                            
+                            if original_name and original_name != product_name:
+                                # Show both enhanced and original names
+                                print(f"      {j}. {product_name} (Score: {score:.3f})")
+                                print(f"         (Original: {original_name})")
+                            else:
+                                # Show only the product name
+                                print(f"      {j}. {product_name} (Score: {score:.3f})")
+                    else:
+                        print(f"Product Suggestions: No suggestions available")
+                else:
+                    print(f"Product Suggestions: Company below similarity threshold")
+                    
+                # NOTE: No JSON export here to avoid multiple files per query
+                    
+            except Exception as e:
+                logger.warning(f"Could not generate product suggestions for {company_name}: {e}")
+                print(f"Product Suggestions: Error generating suggestions")
         
         print(f"   {'-'*60}")
     
-    print(f"\n✅ Query completed successfully using {method}")
+    print(f"\nQuery completed successfully using {method}")
+    
+    # Save product suggestions if enabled
+    if config and config.get('enable_product_suggestions', False) and results:
+        try:
+            # Import product suggestion pipeline
+            from pipelines.product_suggestion_pipeline import PatentProductSuggester
+            
+            # Convert all results to format expected by product suggester
+            companies_data_for_suggestions = []
+            processed_company_ids = set()  # Track processed companies to avoid duplicates
+            
+            # First, add companies from transformation matrix results
+            logger.info(f"Adding {len(results)} companies from transformation matrix results")
+            for result in results:
+                company_id = str(result.get('company_id', result.get('firm_id', '')))
+                company_name = result.get('company_name', result.get('firm_name', 'Unknown'))
+                
+                # Get keywords
+                keywords = []
+                if 'keywords' in result and result['keywords']:
+                    keywords = result['keywords']
+                elif company_data is not None:
+                    try:
+                        company_row = company_data.loc[company_data['hojin_id'].astype(str) == company_id]
+                        if not company_row.empty:
+                            keywords_str = company_row.iloc[0]['company_keywords']
+                            keywords = keywords_str.split('|') if '|' in str(keywords_str) else [str(keywords_str)]
+                            keywords = [k.strip() for k in keywords if k.strip()]
+                    except:
+                        pass
+                
+                company_suggestion_data = {
+                    'hojinid': company_id,
+                    'name': company_name,
+                    'keywords': keywords,
+                    'patents': [],
+                    'source': 'transformation_matrix'  # Mark source
+                }
+                
+                # Add patent data if available
+                if firm_patent_ids and patent_text_map and company_id in firm_patent_ids:
+                    patent_ids = firm_patent_ids[company_id]
+                    max_patents_matrix = 20  # Increased to 20 patents for transformation matrix companies
+                    patents_to_add = patent_ids[:max_patents_matrix]
+                    
+                    for patent_id in patents_to_add:
+                        if patent_id in patent_text_map:
+                            company_suggestion_data['patents'].append({
+                                'id': patent_id,  # Use 'id' key for product suggester
+                                'patent_id': patent_id,
+                                'abstract': patent_text_map[patent_id]
+                            })
+                    
+                    if len(patent_ids) > max_patents_matrix:
+                        logger.info(f"Company {company_name}: Limited to {max_patents_matrix}/{len(patent_ids)} patents for processing")
+                        
+                    # Debug: Show sample patent IDs being passed to product suggester
+                    if len(patents_to_add) > 0:
+                        sample_ids = patents_to_add[:3]  # Show first 3 IDs
+                        logger.info(f"Debug - Sample patent IDs for {company_name}: {sample_ids}")
+                
+                companies_data_for_suggestions.append(company_suggestion_data)
+                processed_company_ids.add(company_id)
+            
+            # Second, add companies from nearest cluster if clustering is available
+            cluster_companies_added = 0
+            if clustering_analyzer is not None and query_embedding is not None:
+                try:
+                    # Find nearest cluster
+                    nearest_cluster, cluster_distance = clustering_analyzer.find_nearest_cluster(query_embedding)
+                    
+                    # Get top companies from the nearest cluster
+                    if hasattr(clustering_analyzer, 'embeddings_matrix') and clustering_analyzer.embeddings_matrix is not None:
+                        top_k_cluster_companies = clustering_analyzer.get_top_k_companies_in_cluster(
+                            nearest_cluster, 
+                            query_embedding, 
+                            k=TOP_K_COMPANIES_IN_CLUSTER
+                        )
+                        
+                        # Add cluster companies that weren't already processed
+                        for cluster_company in top_k_cluster_companies:
+                            cluster_company_id = str(cluster_company.get('company_id', cluster_company.get('hojin_id', '')))
+                            
+                            # Skip if already processed from transformation matrix results
+                            if cluster_company_id in processed_company_ids:
+                                continue
+                                
+                            cluster_company_name = cluster_company.get('company_name', f'Cluster_Company_{cluster_company_id}')
+                            
+                            # Get keywords for cluster company
+                            cluster_keywords = []
+                            if company_data is not None:
+                                try:
+                                    company_row = company_data.loc[company_data['hojin_id'].astype(str) == cluster_company_id]
+                                    if not company_row.empty:
+                                        keywords_str = company_row.iloc[0]['company_keywords']
+                                        cluster_keywords = keywords_str.split('|') if '|' in str(keywords_str) else [str(keywords_str)]
+                                        cluster_keywords = [k.strip() for k in cluster_keywords if k.strip()]
+                                except:
+                                    pass
+                            
+                            cluster_company_data = {
+                                'hojinid': cluster_company_id,
+                                'name': cluster_company_name,
+                                'keywords': cluster_keywords,
+                                'patents': [],
+                                'source': 'nearest_cluster'  # Mark source
+                            }
+                            
+                            # Add patent data for cluster company if available
+                            if firm_patent_ids and patent_text_map and cluster_company_id in firm_patent_ids:
+                                patent_ids = firm_patent_ids[cluster_company_id]
+                                max_patents_cluster = 20  # Increased to 20 patents for cluster companies
+                                patents_to_add = patent_ids[:max_patents_cluster]
+                                
+                                for patent_id in patents_to_add:
+                                    if patent_id in patent_text_map:
+                                        cluster_company_data['patents'].append({
+                                            'id': patent_id,  # Use 'id' key for product suggester
+                                            'patent_id': patent_id,
+                                            'abstract': patent_text_map[patent_id]
+                                        })
+                                
+                                if len(patent_ids) > max_patents_cluster:
+                                    logger.info(f"Cluster company {cluster_company_name}: Limited to {max_patents_cluster}/{len(patent_ids)} patents for processing")
+                                
+                                # Debug: Show sample patent IDs for cluster companies
+                                if len(patents_to_add) > 0:
+                                    sample_ids = patents_to_add[:3]  # Show first 3 IDs
+                                    logger.info(f"Debug - Sample patent IDs for cluster company {cluster_company_name}: {sample_ids}")
+                            
+                            companies_data_for_suggestions.append(cluster_company_data)
+                            processed_company_ids.add(cluster_company_id)
+                            cluster_companies_added += 1
+                            
+                except Exception as e:
+                    logger.warning(f"Could not add cluster companies to product suggestions: {e}")
+            
+            if cluster_companies_added > 0:
+                logger.info(f"Added {cluster_companies_added} additional companies from nearest cluster")
+            
+            logger.info(f"Total companies for product suggestions: {len(companies_data_for_suggestions)}")
+            
+            # Initialize product suggester
+            suggestion_config = {
+                'similarity_threshold': config.get('product_similarity_threshold', PRODUCT_SUGGESTION_CONFIG['similarity_threshold']),
+                'top_k_suggestions': PRODUCT_SUGGESTION_CONFIG['top_k_suggestions'],
+                'enable_openai_enhance': config.get('enable_openai_enhance', PRODUCT_SUGGESTION_CONFIG['enable_openai_enhance']),
+                'debug_enabled': PRODUCT_SUGGESTION_CONFIG['debug_enabled']
+            }
+            
+            suggester = PatentProductSuggester(suggestion_config)
+            
+            # Generate comprehensive product suggestions
+            all_suggestions = suggester.suggest_products(query, companies_data_for_suggestions)
+            
+            if all_suggestions['results']:
+                # Export suggestions to timestamped files (both JSON and text)
+                output_path = suggester.export_results(all_suggestions)
+                
+                # Extract timestamp for text file path
+                timestamp = output_path.split('_')[-1].split('.')[0] if output_path else datetime.now().strftime("%Y%m%d_%H%M%S")
+                text_path = f"data/submissions/product_suggestions_{timestamp}.txt"
+                
+                print(f"Product suggestions saved to:")
+                print(f"  JSON: {output_path}")
+                print(f"  Text: {text_path}")
+                logger.info(f"Saved {len(all_suggestions['results'])} company product suggestions to JSON: {output_path}")
+                logger.info(f"Saved {len(all_suggestions['results'])} company product suggestions to text: {text_path}")
+            
+        except Exception as e:
+            logger.warning(f"Could not save comprehensive product suggestions: {e}")
+    
     print(f"{'='*80}\n")
 
 def get_embedding_file_paths(embedding_type, country, model_type='linear', approx_method='sampling'):
@@ -828,7 +1093,7 @@ def chat_pipeline(config=None):
         print(f"Embedding Type: {config.get('embedding_type', 'fasttext')}")
         print(f"RAG Mode: {'External Summaries' if config.get('rag_use_external_summaries', False) else 'Dual Attention Keywords'}")
         if clustering_analyzer:
-            print(f"🎯 Clustering: Enabled ({clustering_analyzer.best_n_clusters} clusters)")
+            print(f"Clustering: Enabled ({clustering_analyzer.best_n_clusters} clusters)")
         print("Type 'exit' to quit.")
         print("You can enter product queries or patent abstracts.\n")
 
@@ -982,7 +1247,7 @@ def chat_pipeline(config=None):
             print(f"\n=== Patent ↔ Product Search Chat ({country}) ===")
             print(f"Embedding Type: {config.get('embedding_type', 'fasttext')}")
             if clustering_analyzer:
-                print(f"🎯 Clustering: Enabled ({clustering_analyzer.best_n_clusters} clusters)")
+                print(f"Clustering: Enabled ({clustering_analyzer.best_n_clusters} clusters)")
             print("Type 'exit' to quit.")
             if models_available:
                 print("Choose mode: 'matrix' (linear) or 'model' (nonlinear)")

@@ -44,7 +44,7 @@ Examples:
     
     # Main pipeline selection
     parser.add_argument('--pipeline', 
-                        choices=['dual_attn', 'patent_product', 'rag_only', 'clustering'], 
+                        choices=['dual_attn', 'patent_product', 'rag_only', 'clustering', 'product_suggestion'], 
                         required=True,
                         help='Pipeline to run')
     
@@ -76,6 +76,24 @@ Examples:
                         type=int, 
                         default=5,
                         help='Number of top results for RAG queries')
+    
+    # Product suggestion configuration
+    parser.add_argument('--enable_product_suggestions',
+                        action='store_true',
+                        help='Enable product suggestions in test/chat modes')
+    
+    parser.add_argument('--product_similarity_threshold',
+                        type=float,
+                        default=PRODUCT_SUGGESTION_CONFIG['similarity_threshold'],
+                        help='Similarity threshold for product suggestions')
+    
+    parser.add_argument('--enable_openai_enhance',
+                        action='store_true',
+                        help='Use OpenAI to enhance product names (requires API key in .env)')
+    
+    parser.add_argument('--product_suggestions_only',
+                        action='store_true',
+                        help='Run only product suggestions on existing results')
     
     # UI and flow configuration
     parser.add_argument('--ui_flow_type', 
@@ -150,7 +168,11 @@ Examples:
         'max_keywords_display': args.max_keywords_display,
         'model_type': args.model_type,          # New
         'approx_method': args.approx_method,    # Default approximation method
-        'countries': COUNTRY                    # Add countries for consistent clustering
+        'countries': COUNTRY,                    # Add countries for consistent clustering
+        'enable_product_suggestions': args.enable_product_suggestions,
+        'product_similarity_threshold': args.product_similarity_threshold,
+        'enable_openai_enhance': args.enable_openai_enhance,
+        'product_suggestions_only': args.product_suggestions_only
     }
     
     set_seed(42)
@@ -183,6 +205,100 @@ Examples:
     elif args.pipeline == 'clustering':
         from pipelines.clustering_pipeline import clustering_pipeline
         clustering_pipeline(config)
+    
+    elif args.pipeline == 'product_suggestion':
+        if not config.get('query'):
+            # Interactive mode if no query provided
+            query = input("Enter patent abstract or product query: ").strip()
+            if not query:
+                raise ValueError("Error: Query is required for product suggestion pipeline.")
+            config['query'] = query
+        
+        from pipelines.product_suggestion_pipeline import PatentProductSuggester
+        
+        # Enhanced demo data with multiple relevant companies
+        sample_companies = [
+            {
+                'hojinid': 'DEMO001',
+                'name': 'MedTech AI Solutions',
+                'keywords': ['artificial intelligence', 'medical imaging', 'computer vision', 'machine learning', 'healthcare', 'diagnostic systems'],
+                'patents': [
+                    {
+                        'patent_id': 'DEMO2023001',
+                        'abstract': 'AI-powered medical imaging system for automated diagnosis using deep learning neural networks to analyze X-ray, MRI, and CT scans with high accuracy for healthcare professionals.'
+                    },
+                    {
+                        'patent_id': 'DEMO2023002',
+                        'abstract': 'Machine learning system for medical image analysis using artificial intelligence to detect anomalies and assist in clinical decision making.'
+                    }
+                ]
+            },
+            {
+                'hojinid': 'DEMO002',
+                'name': 'Vision AI Technologies',
+                'keywords': ['computer vision', 'artificial intelligence', 'image processing', 'pattern recognition', 'automation'],
+                'patents': [
+                    {
+                        'patent_id': 'DEMO2023003',
+                        'abstract': 'Computer vision system using convolutional neural networks for real-time object detection and image classification in various applications.'
+                    }
+                ]
+            },
+            {
+                'hojinid': 'DEMO003',
+                'name': 'Healthcare Innovation Corp',
+                'keywords': ['healthcare technology', 'medical devices', 'digital health', 'telemedicine', 'health informatics'],
+                'patents': [
+                    {
+                        'patent_id': 'DEMO2023004',
+                        'abstract': 'Digital healthcare platform integrating medical devices with cloud-based analytics for remote patient monitoring and diagnosis.'
+                    }
+                ]
+            }
+        ]
+        
+        # Initialize suggester with lower threshold for demo
+        demo_config = {
+            'similarity_threshold': 0.1,  # Lower threshold for demo
+            'top_k_suggestions': 3,
+            'enable_openai_enhance': config.get('enable_openai_enhance', False),
+            'max_combinations': PRODUCT_SUGGESTION_CONFIG['max_combinations'],  # FIXED: Use config value
+            'max_keywords': PRODUCT_SUGGESTION_CONFIG['max_keywords'],
+            'debug_enabled': False  # Disable debug for cleaner output
+        }
+        suggester = PatentProductSuggester(demo_config)
+        
+        # Generate suggestions
+        results = suggester.suggest_products(config['query'], sample_companies)
+        
+        # Display results
+        print(f"\nProduct Suggestions for: '{config['query'][:60]}...'")
+        print(f"Companies processed: {len(results['results'])}")
+        print(f"Companies with suggestions: {len([r for r in results['results'] if r['products']])}")
+        print(f"Total products suggested: {sum(len(r['products']) for r in results['results'])}")
+        
+        for i, company in enumerate(results['results'], 1):
+            print(f"\n{i}. {company['company_name']} (ID: {company['hojinid']})")
+            print(f"   Company Similarity: {company['company_similarity']:.3f}")
+            print(f"   Keyword Similarity: {company['keyword_similarity']:.3f}")
+            print(f"   Patent Similarity: {company['patent_similarity']:.3f}")
+            print(f"   Suggested Products:")
+            for j, product in enumerate(company['products'], 1):
+                print(f"      {j}. {product['product_name']}")
+                print(f"         Score: {product['score']:.3f} | Lexical: {product['lexical_similarity']:.3f} | Semantic: {product['semantic_similarity']:.3f}")
+        
+        if not results['results']:
+            print(f"\nNo suggestions found for this query.")
+        
+        # Export results
+        output_path = suggester.export_results(results)
+        print(f"\nResults saved to:")
+        print(f"  JSON: {output_path}")
+        
+        # Text file should have same timestamp but different directory
+        timestamp = output_path.split('_')[-1].split('.')[0]  # Extract timestamp
+        text_path = f"data/submissions/product_suggestions_{timestamp}.txt"
+        print(f"  Text: {text_path}")
 
 if __name__ == "__main__":
     main()

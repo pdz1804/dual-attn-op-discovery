@@ -98,7 +98,46 @@ DBSCAN_MIN_SAMPLES = 5
 DBSCAN_EPS = None
 
 # === DISPLAY CONFIGURATION ===
+
+# Maximum number of keywords to display in results
 MAX_KEYWORDS_DISPLAY = 50  # Maximum number of keywords to show in results summary
 KEYWORDS_PER_COMPANY_CLUSTER = 10  # Keywords to show per company in cluster display
 COMPANIES_PER_CLUSTER_DISPLAY = 3  # Number of sample companies to show per cluster
 TOP_K_COMPANIES_IN_CLUSTER = 5  # Number of top-k most relevant companies to retrieve in cluster
+
+# === PRODUCT SUGGESTION CONFIGURATION ===
+
+# Enable/disable product suggestion pipeline
+ENABLE_PRODUCT_SUGGESTIONS = True
+
+# Product suggestion model parameters
+PRODUCT_SUGGESTION_CONFIG = {
+    'model_name': 'all-MiniLM-L6-v2',  # Sentence transformer model
+    'alpha': 0.3,  # Weight for keyword vs patent similarity (0-1)
+    'beta': 0.3,   # Weight for lexical vs semantic similarity (0-1) - Lower value favors semantic similarity
+    'similarity_threshold': 0.075,  # Minimum similarity threshold for suggestions (lowered for real data)
+    'top_k_suggestions': 5,  # Number of product suggestions per company
+    'max_keywords': 20,  # Maximum keywords to extract per text
+    'max_combinations': 5,  # Maximum keyword combinations for product generation
+    'use_patent_data': True,  # Whether to use company patent data
+    'enable_openai_enhance': False,  # Use OpenAI to enhance product names
+    'openai_model': 'gpt-4o-mini',  # OpenAI model for enhancement
+    'output_directory': 'data/suggestions',  # Directory to save suggestion results
+    'submissions_directory': 'data/submissions',  # Directory to save text output files
+    'debug_enabled': False  # Enable debug logging for product suggestions
+}
+
+# Patent processing limits for product suggestions
+MAX_PATENTS_PER_COMPANY = 20  # Maximum patents to process per company for similarity computation
+MAX_PATENTS_FOR_ANALYSIS = 20  # Maximum patents to analyze for keyword extraction
+
+# Keyword extraction limits for different contexts
+KEYWORD_EXTRACTION_LIMITS = {
+    'similarity_computation': 15,  # Keywords for similarity comparison
+    'patent_analysis': 10,  # Keywords per patent for analysis
+    'theme_extraction': 5,  # Keywords for theme generation
+    'top_keywords_limit': 15,  # Top keywords to keep from frequency analysis
+    'theme_combinations': 5  # Max theme combinations to generate
+}
+
+# Note: Product name templates are now domain-specific and defined within the pipeline

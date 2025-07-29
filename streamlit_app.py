@@ -3,23 +3,29 @@ Enhanced Streamlit Web Interface for FullFlow Patent-Product Matching System
 with Advanced Clustering Analysis and Pipeline Management
 """
 
+# Import necessary libraries
 import streamlit as st
 import pandas as pd
 import numpy as np
-import json
 import os
-import logging
-import subprocess
 import sys
-from typing import Dict, List, Any
+import json
+import logging
+import time
+import subprocess
+from datetime import datetime
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime
-import time # Added for progress bar
+from plotly.subplots import make_subplots
 
-# Import project modules
-from configs.paths import *
+# Add project root to Python path
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, project_root)
+
+# Import our configurations and models
 from configs.hyperparams import *
+from configs.paths import *
+from utils.seed_everything import set_seed
 from utils.vector_utils import create_embedder
 from utils.rag_utils import create_rag_processor
 from pipelines.patent_product_pipeline import (
@@ -29,9 +35,20 @@ from pipelines.patent_product_pipeline import (
 )
 from pipelines.clustering_pipeline import load_clustering_analyzer, clustering_pipeline
 
-# Configure logging
+# Import product suggestion pipeline
+from pipelines.product_suggestion_pipeline import PatentProductSuggester, convert_pipeline_results_to_suggestions_format
+
+# Configure logging for this module
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Set page configuration
+st.set_page_config(
+    page_title="FullFlow: Patent-Product Matching System",
+    page_icon="🔬",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 class FullFlowApp:
     """Enhanced Streamlit app with comprehensive clustering and pipeline management"""
@@ -231,6 +248,8 @@ class FullFlowApp:
                 st.sidebar.info("🧠 **Model Mode**: Neural networks (more complex)")
         else:
             ml_mode = "Matrix (Linear)"
+            model_type = "linear"  # Default for RAG-only mode
+            approx_method = None   # Default for RAG-only mode
         
         # Embedding configuration with clear feedback
         st.sidebar.subheader("📊 Embedding Configuration")
@@ -298,6 +317,54 @@ class FullFlowApp:
             help="Choose clustering algorithm for analysis"
         )
         
+        # Product suggestion configuration with visual feedback
+        st.sidebar.subheader("🛍️ Product Suggestion Configuration")
+        enable_product_suggestions = st.sidebar.checkbox(
+            "Enable Product Suggestions",
+            value=True,
+            help="Generate AI-powered product suggestions for each company based on their patents and keywords"
+        )
+        
+        if enable_product_suggestions:
+            st.sidebar.info("🎯 **Product Suggestions**: AI-powered recommendations based on patents and keywords")
+            
+            with st.sidebar.expander("🔧 Product Suggestion Settings", expanded=False):
+                suggestion_threshold = st.slider(
+                    "Similarity Threshold",
+                    min_value=0.01,
+                    max_value=0.5,
+                    value=PRODUCT_SUGGESTION_CONFIG['similarity_threshold'],
+                    step=0.01,
+                    help="Minimum similarity score for companies to get product suggestions"
+                )
+                
+                max_suggestions_per_company = st.slider(
+                    "Max Suggestions per Company",
+                    min_value=1,
+                    max_value=10,
+                    value=PRODUCT_SUGGESTION_CONFIG['top_k_suggestions'],
+                    help="Maximum number of product suggestions per company"
+                )
+                
+                enable_openai_enhance = st.checkbox(
+                    "Use OpenAI Enhancement",
+                    value=PRODUCT_SUGGESTION_CONFIG['enable_openai_enhance'],
+                    help="Use OpenAI to enhance product names (requires API key in .env file)"
+                )
+                
+                max_combinations_setting = st.slider(
+                    "Max Keyword Combinations",
+                    min_value=2,
+                    max_value=10,
+                    value=PRODUCT_SUGGESTION_CONFIG['max_combinations'],
+                    help="Maximum number of keywords to combine (2=pairs only, 5=up to 5-word combinations)"
+                )
+        else:
+            suggestion_threshold = PRODUCT_SUGGESTION_CONFIG['similarity_threshold']
+            max_suggestions_per_company = PRODUCT_SUGGESTION_CONFIG['top_k_suggestions']
+            enable_openai_enhance = PRODUCT_SUGGESTION_CONFIG['enable_openai_enhance']
+            max_combinations_setting = PRODUCT_SUGGESTION_CONFIG['max_combinations']
+        
         # Advanced options in an expander
         with st.sidebar.expander("🔧 Advanced Options"):
             force_rebuild_rag = st.checkbox(
@@ -338,7 +405,15 @@ class FullFlowApp:
             # Add display configuration constants from hyperparams
             'keywords_per_company_cluster': KEYWORDS_PER_COMPANY_CLUSTER,
             'companies_per_cluster_display': COMPANIES_PER_CLUSTER_DISPLAY, 
-            'top_k_companies_in_cluster': TOP_K_COMPANIES_IN_CLUSTER
+            'top_k_companies_in_cluster': TOP_K_COMPANIES_IN_CLUSTER,
+            # Product suggestion configuration
+            'enable_product_suggestions': enable_product_suggestions,
+            'product_similarity_threshold': suggestion_threshold,
+            'max_suggestions_per_company': max_suggestions_per_company,
+            'enable_openai_enhance': enable_openai_enhance,
+            'max_combinations_setting': max_combinations_setting,
+            'max_patents_per_company': MAX_PATENTS_PER_COMPANY,
+            'max_abstract_length': 300
         }
         
         st.session_state.config = config
@@ -1435,6 +1510,10 @@ class FullFlowApp:
                             
                             st.caption(abstract)
                             st.divider()
+            
+            # Generate and display product suggestions if enabled
+            if config.get('enable_product_suggestions', False):
+                self.display_product_suggestions(query, results, config)
         else:
             st.warning("🔍 No companies found matching your query. Try different keywords or check your configuration.")
             
@@ -1444,6 +1523,389 @@ class FullFlowApp:
             st.markdown("• Check if your embedding type matches trained models")
             st.markdown("• Ensure RAG database is built for your embedding type")
             st.markdown("• Try different flow types (ML vs RAG)")
+
+    def display_product_suggestions(self, query, results, config):
+        """Generate and display AI-powered product suggestions for each company"""
+        st.markdown("---")
+        st.markdown("### 🛍️ AI-Powered Product Suggestions")
+        # st.info("🎯 **Product suggestions are generated using AI analysis of patents and company keywords**")
+        
+        # Get configuration
+        similarity_threshold = config.get('product_similarity_threshold', PRODUCT_SUGGESTION_CONFIG['similarity_threshold'])
+        max_suggestions = config.get('max_suggestions_per_company', PRODUCT_SUGGESTION_CONFIG['top_k_suggestions'])
+        enable_openai = config.get('enable_openai_enhance', PRODUCT_SUGGESTION_CONFIG['enable_openai_enhance'])
+        
+        try:
+            with st.spinner("🔄 Generating AI product suggestions..."):
+                # Convert query results to format expected by PatentProductSuggester
+                companies_data = []
+                
+                # Process main results (transformation matrix companies)
+                # st.info("📊 **Processing Transformation Matrix Companies**")
+                for result in results.get('results', []):
+                    company_data = {
+                        'hojinid': result.get('company_id', 'unknown'),
+                        'name': result.get('company_name', 'Unknown Company'),
+                        'keywords': result.get('keywords', []),
+                        'patents': [],
+                        'source': 'transformation_matrix'
+                    }
+                    
+                    # Convert sample patents to the expected format
+                    sample_patents = result.get('sample_patents', [])
+                    for patent in sample_patents:
+                        company_data['patents'].append({
+                            'id': patent.get('patent_id', ''),
+                            'patent_id': patent.get('patent_id', ''),
+                            'abstract': patent.get('abstract', '')
+                        })
+                    
+                    companies_data.append(company_data)
+                
+                # Process cluster companies if available
+                cluster_info = results.get('cluster_info', {})
+                cluster_companies = cluster_info.get('cluster_companies', [])
+                
+                # Debug cluster companies structure
+                if cluster_companies:
+                    logger.info(f"Found {len(cluster_companies)} cluster companies")
+                    for i, cc in enumerate(cluster_companies[:2]):  # Log first 2 for debugging
+                        logger.info(f"Cluster company {i+1}: {cc}")
+                        logger.info(f"  Available keys: {list(cc.keys())}")
+                        if 'keywords' in cc:
+                            logger.info(f"  Keywords count: {len(cc['keywords'])}")
+                else:
+                    logger.info("No cluster companies found in results")
+                    if 'cluster_info' in results:
+                        logger.info(f"Cluster info keys: {list(cluster_info.keys())}")
+                    else:
+                        logger.info("No cluster_info in results")
+                
+                if cluster_companies and config.get('enable_clustering', False):
+                    # st.info(f"🎯 **Processing Nearest Cluster Companies** ({len(cluster_companies)} found)")
+                    
+                    # Load patent data for cluster companies
+                    try:
+                        import pandas as pd
+                        patent_df = None
+                        firm_patent_ids = {}
+                        patent_text_map = {}
+                        
+                        # Load patent data
+                        patent_file = US_PATENT_DATA_CLEANED  # US patents
+                        patent_df = pd.read_csv(patent_file)
+                        
+                        # Process patent IDs and text mapping
+                        for firm_id, group in patent_df.groupby('hojin_id'):
+                            firm_id = str(firm_id)
+                            firm_patent_ids[firm_id] = group['appln_id'].tolist()
+                            for app_id, abs_text in zip(group['appln_id'], group['clean_abstract'].dropna()):
+                                patent_text_map[app_id] = abs_text
+                    except Exception as e:
+                        logger.warning(f"Could not load patent data for cluster companies: {e}")
+                        firm_patent_ids = {}
+                        patent_text_map = {}
+                    
+                    # Try to get company names and IDs from clustering analyzer
+                    clustering_analyzer = st.session_state.get('clustering_analyzer')
+                    
+                    for cluster_company in cluster_companies:
+                        company_name = cluster_company.get('name', 'Unknown Company')
+                        
+                        # FIXED: Get full company data from clustering analyzer instead of limited display data
+                        company_id = 'unknown'
+                        full_keywords = []
+                        
+                        # Try to get company_id from cluster_company data first
+                        if 'company_id' in cluster_company:
+                            company_id = str(cluster_company['company_id'])
+                            logger.info(f"Using company_id from cluster data: {company_id}")
+                        
+                        if clustering_analyzer and hasattr(clustering_analyzer, 'company_data') and clustering_analyzer.company_data is not None:
+                            try:
+                                company_row = None
+                                
+                                # Try lookup by company_id first (more reliable)
+                                if company_id != 'unknown':
+                                    company_row = clustering_analyzer.company_data[
+                                        clustering_analyzer.company_data['hojin_id'].astype(str) == company_id
+                                    ]
+                                    if not company_row.empty:
+                                        logger.info(f"Found company by ID: {company_id}")
+                                
+                                # Fallback to lookup by name if ID lookup failed
+                                if company_row is None or company_row.empty:
+                                    company_row = clustering_analyzer.company_data[
+                                        clustering_analyzer.company_data['company_name'] == company_name
+                                    ]
+                                    if not company_row.empty:
+                                        company_id = str(company_row.iloc[0]['hojin_id'])
+                                        logger.info(f"Found company by name: {company_name} -> ID: {company_id}")
+                                
+                                if not company_row.empty:
+                                    # FIXED: Get FULL keywords, not truncated ones
+                                    full_keywords_str = company_row.iloc[0].get('company_keywords', '')
+                                    if full_keywords_str and str(full_keywords_str) != 'nan':
+                                        full_keywords = str(full_keywords_str).split('|')
+                                        full_keywords = [kw.strip() for kw in full_keywords if kw.strip()]
+                                        logger.info(f"Found full company data for {company_name}: ID={company_id}, {len(full_keywords)} keywords")
+                                    else:
+                                        logger.warning(f"No keywords found for {company_name} in full company data")
+                                else:
+                                    logger.warning(f"Company {company_name} (ID: {company_id}) not found in clustering analyzer company_data")
+                            except Exception as e:
+                                logger.warning(f"Could not find company data for {company_name}: {e}")
+                        
+                        # Fallback to display keywords if full keywords not found
+                        if not full_keywords:
+                            full_keywords = cluster_company.get('keywords', [])
+                            logger.info(f"Using fallback keywords for {company_name}: {len(full_keywords)} keywords")
+                        
+                        company_data = {
+                            'hojinid': company_id,
+                            'name': company_name,
+                            'keywords': full_keywords,  # FIXED: Use full keywords
+                            'patents': [],
+                            'source': 'nearest_cluster'
+                        }
+                        
+                        # Add patent data if company ID was found (use config values)
+                        max_patents_per_company = config.get('max_patents_per_company', MAX_PATENTS_PER_COMPANY)
+                        max_abstract_length = config.get('max_abstract_length', 300)
+                        
+                        if company_id != 'unknown' and company_id in firm_patent_ids:
+                            patent_ids = firm_patent_ids[company_id][:max_patents_per_company]
+                            for patent_id in patent_ids:
+                                if patent_id in patent_text_map:
+                                    abstract_text = patent_text_map[patent_id]
+                                    company_data['patents'].append({
+                                        'id': patent_id,
+                                        'patent_id': patent_id,
+                                        'abstract': abstract_text[:max_abstract_length] + "..." if len(abstract_text) > max_abstract_length else abstract_text
+                                    })
+                        
+                        # FIXED: Add company data outside the patent loop
+                        companies_data.append(company_data)
+                        
+                        # Debug logging for cluster companies
+                        if company_id != 'unknown':
+                            logger.info(f"Added cluster company: {company_name} (ID: {company_id}) with {len(company_data['patents'])} patents and {len(full_keywords)} keywords")
+                        else:
+                            logger.info(f"Added cluster company: {company_name} (ID: unknown) with {len(full_keywords)} keywords only")
+                    
+                    # st.info(f"✅ **Processed {len([c for c in companies_data if c.get('source') == 'nearest_cluster'])} cluster companies**")
+                
+                if not companies_data:
+                    st.warning("⚠️ No companies available for product suggestions")
+                    return
+                
+                # Display processing summary
+                total_matrix_companies = len([c for c in companies_data if c.get('source') == 'transformation_matrix'])
+                total_cluster_companies = len([c for c in companies_data if c.get('source') == 'nearest_cluster'])
+                
+                if total_matrix_companies > 0 and total_cluster_companies > 0:
+                    st.success(f"✅ **Ready to process**: {total_matrix_companies} Matrix companies + {total_cluster_companies} Cluster companies = {len(companies_data)} total")
+                elif total_matrix_companies > 0:
+                    st.success(f"✅ **Ready to process**: {total_matrix_companies} Matrix companies")
+                elif total_cluster_companies > 0:
+                    st.success(f"✅ **Ready to process**: {total_cluster_companies} Cluster companies")
+                else:
+                    st.warning("⚠️ No valid companies found for processing")
+                
+                # Initialize PatentProductSuggester with configuration
+                suggestion_config = {
+                    'similarity_threshold': similarity_threshold,
+                    'top_k_suggestions': max_suggestions,
+                    'enable_openai_enhance': enable_openai,
+                    'alpha': PRODUCT_SUGGESTION_CONFIG['alpha'],
+                    'beta': PRODUCT_SUGGESTION_CONFIG['beta'],
+                    'max_keywords': PRODUCT_SUGGESTION_CONFIG['max_keywords'],
+                    'max_combinations': config.get('max_combinations_setting', PRODUCT_SUGGESTION_CONFIG['max_combinations']),
+                    'use_patent_data': PRODUCT_SUGGESTION_CONFIG['use_patent_data'],
+                    'debug_enabled': False  # Disable debug for cleaner UI
+                }
+                
+                # Debug: Show configuration being used
+                st.info(f"🔧 **Config**: max_combinations={suggestion_config['max_combinations']}, max_keywords={suggestion_config['max_keywords']}, threshold={suggestion_config['similarity_threshold']:.3f}")
+                
+                suggester = PatentProductSuggester(suggestion_config)
+                
+                # Generate suggestions
+                suggestion_results = suggester.suggest_products(query, companies_data)
+                
+                # Display summary metrics
+                col1, col2, col3, col4 = st.columns(4)
+                
+                total_companies = len(suggestion_results.get('results', []))
+                companies_with_suggestions = len([r for r in suggestion_results.get('results', []) if r.get('products', [])])
+                total_products = sum(len(r.get('products', [])) for r in suggestion_results.get('results', []))
+                avg_similarity = suggestion_results.get('summary', {}).get('average_similarity', 0.0)
+                
+                with col1:
+                    st.metric("🏢 Companies Analyzed", total_companies)
+                with col2:
+                    st.metric("✅ Companies with Suggestions", companies_with_suggestions)
+                with col3:
+                    st.metric("🛍️ Total Products Suggested", total_products)
+                with col4:
+                    st.metric("📊 Avg. Similarity", f"{avg_similarity:.3f}")
+                
+                # Display individual company suggestions
+                if suggestion_results.get('results'):
+                    st.markdown("#### 🏢 Product Suggestions by Company")
+                    
+                    # Separate results by source for better organization
+                    matrix_results = [r for r in suggestion_results['results'] if r.get('source') == 'transformation_matrix']
+                    cluster_results = [r for r in suggestion_results['results'] if r.get('source') == 'nearest_cluster']
+                    
+                    # Display matrix companies first
+                    if matrix_results:
+                        st.markdown("##### 🔬 Transformation Matrix Companies")
+                        for i, company_result in enumerate(matrix_results):
+                            self._display_company_suggestion(company_result, i, similarity_threshold, enable_openai)
+                    
+                    # Display cluster companies second
+                    if cluster_results:
+                        st.markdown("##### 🎯 Nearest Cluster Companies")
+                        for i, company_result in enumerate(cluster_results):
+                            self._display_company_suggestion(company_result, i + len(matrix_results), similarity_threshold, enable_openai)
+                    
+                    # If no source separation, display all together
+                    if not matrix_results and not cluster_results:
+                        for i, company_result in enumerate(suggestion_results['results']):
+                            self._display_company_suggestion(company_result, i, similarity_threshold, enable_openai)
+                
+                # Automatic export (like in main.py)
+                if suggestion_results.get('results'):
+                    st.markdown("---")
+                    st.markdown("#### 📥 Automatic Export")
+                    
+                    with st.spinner("💾 Automatically exporting results..."):
+                        try:
+                            # Export to JSON
+                            json_path = suggester.export_results(suggestion_results)
+                            
+                            # Export to Text  
+                            text_path = suggester.export_results_as_text(suggestion_results)
+                            
+                            st.success("✅ **Results automatically exported!**")
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.info(f"📄 **JSON**: `{json_path}`")
+                            with col2:
+                                st.info(f"📝 **Text**: `{text_path}`")
+                            
+                            # Display summary like in main.py
+                            total_companies = len(suggestion_results['results'])
+                            companies_with_suggestions = len([r for r in suggestion_results['results'] if r['products']])
+                            total_products = sum(len(r['products']) for r in suggestion_results['results'])
+                            
+                            st.markdown("#### 📊 Export Summary")
+                            st.write(f"**Query**: '{query[:60]}{'...' if len(query) > 60 else ''}'")
+                            st.write(f"**Companies processed**: {total_companies}")
+                            st.write(f"**Companies with suggestions**: {companies_with_suggestions}")
+                            st.write(f"**Total products suggested**: {total_products}")
+                            
+                        except Exception as e:
+                            st.error(f"❌ Automatic export failed: {str(e)}")
+                            logger.error(f"Export error: {e}")
+                    
+                    # Manual export option as backup
+                    with st.expander("🔧 Manual Export Options", expanded=False):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("📄 Re-export to JSON", type="secondary"):
+                                try:
+                                    json_path = suggester.export_results(suggestion_results)
+                                    st.success(f"✅ Results re-exported to: `{json_path}`")
+                                except Exception as e:
+                                    st.error(f"❌ Export failed: {str(e)}")
+                        
+                        with col2:
+                            if st.button("📝 Re-export to Text", type="secondary"):
+                                try:
+                                    text_path = suggester.export_results_as_text(suggestion_results)
+                                    st.success(f"✅ Results re-exported to: `{text_path}`")
+                                except Exception as e:
+                                    st.error(f"❌ Export failed: {str(e)}")
+                
+                else:
+                    st.warning("⚠️ No product suggestions generated. Try lowering the similarity threshold or using different keywords.")
+                    
+        except Exception as e:
+            st.error(f"❌ Product suggestion generation failed: {str(e)}")
+            st.info("💡 Make sure the product suggestion models are properly initialized")
+            logger.error(f"Product suggestion error: {e}")
+
+    def _display_company_suggestion(self, company_result, index, similarity_threshold, enable_openai):
+        """Helper method to display individual company suggestion"""
+        company_name = company_result.get('company_name', 'Unknown Company')
+        company_similarity = company_result.get('company_similarity', 0.0)
+        products = company_result.get('products', [])
+        source = company_result.get('source', 'unknown')
+        
+        # Color coding based on similarity
+        if company_similarity > 0.3:
+            score_color = "🟢"
+        elif company_similarity > 0.15:
+            score_color = "🟡"
+        else:
+            score_color = "🔴"
+        
+        # Source emoji
+        source_emoji = "🔬" if source == 'transformation_matrix' else "🎯" if source == 'nearest_cluster' else "❓"
+        source_text = "Matrix" if source == 'transformation_matrix' else "Cluster" if source == 'nearest_cluster' else "Unknown"
+        
+        with st.expander(
+            f"{score_color} **{company_name}** ({source_emoji} {source_text}) - {len(products)} products (Similarity: {company_similarity:.3f})",
+            expanded=index < 3 and len(products) > 0  # Expand first 3 companies with suggestions
+        ):
+            if products:
+                # Company similarity details
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("🎯 Overall Similarity", f"{company_similarity:.3f}")
+                with col2:
+                    keyword_sim = company_result.get('keyword_similarity', 0.0)
+                    st.metric("🏷️ Keyword Similarity", f"{keyword_sim:.3f}")
+                with col3:
+                    patent_sim = company_result.get('patent_similarity', 0.0)
+                    st.metric("📄 Patent Similarity", f"{patent_sim:.3f}")
+                
+                st.markdown("**🛍️ Suggested Products:**")
+                
+                # Display products in a structured way
+                for j, product in enumerate(products, 1):
+                    product_name = product.get('product_name', 'Unknown Product')
+                    product_score = product.get('score', 0.0)
+                    lexical_sim = product.get('lexical_similarity', 0.0)
+                    semantic_sim = product.get('semantic_similarity', 0.0)
+                    
+                    # Product box with score
+                    with st.container():
+                        st.markdown(f"**{j}. {product_name}**")
+                        
+                        # Product metrics in smaller columns
+                        p_col1, p_col2, p_col3 = st.columns(3)
+                        with p_col1:
+                            st.caption(f"🎯 Score: {product_score:.3f}")
+                        with p_col2:
+                            st.caption(f"📝 Lexical: {lexical_sim:.3f}")
+                        with p_col3:
+                            st.caption(f"🧠 Semantic: {semantic_sim:.3f}")
+                        
+                        # Show enhanced vs original if available
+                        if 'original_name' in product and enable_openai:
+                            st.caption(f"💡 *Enhanced by AI from: {product['original_name']}*")
+                        
+                        if j < len(products):
+                            st.divider()
+            else:
+                st.info(f"💡 No product suggestions generated for {company_name} (similarity below threshold: {similarity_threshold:.3f})")
+                
+                # Show why no suggestions were generated
+                st.caption(f"Company similarity: {company_similarity:.3f} < Threshold: {similarity_threshold:.3f}")
 
     def display_cluster_info(self, cluster_info):
         """Display cluster information"""
@@ -1602,7 +2064,17 @@ class FullFlowApp:
             st.write(f"- best_model: {clustering_analyzer.best_model is not None}")
             st.write(f"- cluster_assignments: {clustering_analyzer.cluster_assignments is not None}")
             st.write(f"- company_ids: {len(clustering_analyzer.company_ids) if clustering_analyzer.company_ids else 0}")
-            st.write(f"- file_paths: {list(clustering_analyzer.file_paths.keys()) if hasattr(clustering_analyzer, 'file_paths') else 'N/A'}")
+            
+            # Enhanced file paths display with existence check
+            if hasattr(clustering_analyzer, 'file_paths') and clustering_analyzer.file_paths:
+                # st.write("**📁 File Status:**")
+                for file_type, file_path in clustering_analyzer.file_paths.items():
+                    exists = "-" if os.path.exists(file_path) else "❌"
+                    # Show relative path for cleaner display
+                    rel_path = os.path.relpath(file_path, start=os.getcwd()).replace('\\', '/')
+                    st.write(f"  {exists} {file_type}: `{rel_path}`")
+            else:
+                st.write("- file_paths: N/A")
         
         # Load and display real ranking results
         ranking_file = clustering_analyzer.file_paths.get('ranking_results')
@@ -1860,7 +2332,7 @@ class FullFlowApp:
         with col1:
             pipeline_type = st.selectbox(
                 "Select Pipeline",
-                ["clustering", "dual_attn", "patent_product", "rag_only"],
+                ["clustering", "dual_attn", "patent_product", "rag_only", "product_suggestion"],
                 help="Choose which pipeline to run"
             )
         
@@ -1932,6 +2404,27 @@ class FullFlowApp:
             
             force_rebuild = False
         
+        elif pipeline_type == "product_suggestion":
+            st.info("🛍️ **Product Suggestion Pipeline**: Generate AI-powered product suggestions based on patent queries")
+            
+            query = st.text_area("Patent Query", placeholder="Enter patent abstract or product query here...", height=100)
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                similarity_threshold = st.slider("Similarity Threshold", 0.01, 0.5, 
+                                               PRODUCT_SUGGESTION_CONFIG['similarity_threshold'], 0.01)
+                max_suggestions = st.slider("Max Suggestions per Company", 1, 10, 
+                                          PRODUCT_SUGGESTION_CONFIG['top_k_suggestions'])
+            
+            with col2:
+                enable_openai = st.checkbox("Enable OpenAI Enhancement", 
+                                          value=PRODUCT_SUGGESTION_CONFIG['enable_openai_enhance'])
+                use_demo_data = st.checkbox("Use Demo Data", value=True, 
+                                          help="Use built-in demo companies or real data")
+            
+            enable_clustering = False
+            force_rebuild = False
+        
         # Run pipeline button
         st.subheader("Execute Pipeline")
         
@@ -1972,6 +2465,20 @@ class FullFlowApp:
         # Add query for RAG-only
         if pipeline_type == "rag_only" and 'query' in params and params['query'].strip():
             cmd.extend(["--query", params['query'].strip()])
+        
+        # Add product suggestion options
+        if pipeline_type == "product_suggestion":
+            if 'query' in params and params['query'].strip():
+                cmd.extend(["--query", params['query'].strip()])
+            
+            if 'similarity_threshold' in params:
+                cmd.extend(["--product_similarity_threshold", str(params['similarity_threshold'])])
+            
+            if 'max_suggestions' in params:
+                cmd.extend(["--product_suggestions_only"])  # Use suggestions only mode
+            
+            if params.get('enable_openai'):
+                cmd.append("--enable_openai_enhance")
         
         # Display command
         st.subheader("🔧 Command Being Executed")
@@ -2052,14 +2559,14 @@ class FullFlowApp:
         # Example selection
         example_type = st.selectbox(
             "Select Demo Type",
-            ["Query Results", "Clustering Analysis", "Performance Comparison", "Pipeline Results"]
+            ["Query Results", "Clustering Analysis", "Performance Comparison (not implemented)", "Pipeline Results"]
         )
         
         if example_type == "Query Results":
             self.show_demo_query_results()
         elif example_type == "Clustering Analysis":
             self.show_demo_clustering()
-        elif example_type == "Performance Comparison":
+        elif example_type == "Performance Comparison (not implemented)":
             self.show_demo_performance()
         elif example_type == "Pipeline Results":
             self.show_demo_pipeline_results()
@@ -2125,7 +2632,7 @@ class FullFlowApp:
 
     def show_demo_performance(self):
         """Show demo performance comparison"""
-        st.subheader("⚡ Performance Comparison")
+        st.subheader("⚡ Performance Comparison (not implemented)")
         
         # Create sample performance data
         comparison_data = {
@@ -2147,7 +2654,7 @@ class FullFlowApp:
             color="Accuracy",
             color_continuous_scale="Viridis"
         )
-        fig1.update_xaxis(tickangle=45)
+        fig1.update_layout(xaxis_tickangle=45)
         st.plotly_chart(fig1, use_container_width=True)
         
         # Speed vs Accuracy scatter
@@ -2297,13 +2804,21 @@ class FullFlowApp:
         
         # Check for important directories and files
         important_paths = {
-            "Data Directory": "data",
+            "Data Directory": "data/CN_JP_US_data",  # FIXED: Check actual data directory
             "Models Directory": "models", 
             "Clustering Results": "data/clustering/results",
             "Clustering Models": "data/clustering/models",
             "Output Images": "data/outputs/img",
             "Vector Database": "data/vector_db",
             "Config File": "streamlit_config.json"
+        }
+        
+        # Also check critical data files
+        critical_files = {
+            "US Web Data": "data/CN_JP_US_data/us_web_with_company.csv",
+            "US Patent Data": "data/CN_JP_US_data/us_patent202506.csv", 
+            "Cleaned Patents": "data/CN_JP_US_data/cleaned_patents.csv",
+            "FastText Vectors": "data/CN_JP_US_data/fasttext_web_patent.vec"
         }
         
         for name, path in important_paths.items():
@@ -2323,6 +2838,28 @@ class FullFlowApp:
                         size_info = " (access denied)"
             
             st.write(f"{status_icon} **{name}:** {path}{size_info}")
+        
+        # Check critical data files
+        st.write("---")
+        st.write("**📄 Critical Data Files:**")
+        
+        for name, path in critical_files.items():
+            exists = os.path.exists(path)
+            status_icon = "✅" if exists else "❌"
+            size_info = ""
+            
+            if exists and os.path.isfile(path):
+                size = os.path.getsize(path)
+                if size > 1024**3:  # > 1GB
+                    size_info = f" ({size / 1024**3:.1f} GB)"
+                elif size > 1024**2:  # > 1MB
+                    size_info = f" ({size / 1024**2:.1f} MB)"
+                elif size > 1024:  # > 1KB
+                    size_info = f" ({size / 1024:.1f} KB)"
+                else:
+                    size_info = f" ({size} bytes)"
+            
+            st.write(f"{status_icon} **{name}:** `{path}`{size_info}")
 
     def render_documentation(self):
         """Enhanced documentation tab"""
@@ -2330,15 +2867,19 @@ class FullFlowApp:
         
         doc_section = st.selectbox(
             "Select Documentation Section",
-            ["Quick Start", "Pipeline Guide", "Clustering Guide", "API Reference", "Configuration Guide", "Troubleshooting"]
+            ["Quick Start", "Pipeline Guide", "Product Suggestions Guide", "Clustering Guide", "Export & File Management", "API Reference", "Configuration Guide", "Troubleshooting"]
         )
         
         if doc_section == "Quick Start":
             self.show_quick_start()
         elif doc_section == "Pipeline Guide":
             self.show_pipeline_guide()
+        elif doc_section == "Product Suggestions Guide":
+            self.show_product_suggestions_guide()
         elif doc_section == "Clustering Guide":
             self.show_clustering_guide()
+        elif doc_section == "Export & File Management":
+            self.show_export_file_guide()
         elif doc_section == "API Reference":
             self.show_api_reference()
         elif doc_section == "Configuration Guide":
@@ -2362,15 +2903,23 @@ class FullFlowApp:
         3. Run **clustering** pipeline to build clustering analysis
         4. Run **patent_product** pipeline with mode=train to build models/databases
         
-        ### 3. Run Queries
+        ### 3. Configure Features (Optional)
+        1. **🛍️ Product Suggestions**: Enable AI-powered product name generation
+        2. **🎯 Clustering**: Enable company clustering analysis  
+        3. **🤖 OpenAI**: Enable AI enhancement for product suggestions
+        
+        ### 4. Run Queries
         1. Go to "🔍 Query Interface" tab
         2. Enter your query or use quick examples
         3. Click "🔍 Run Query" to get results with clustering info
+        4. **New**: Product suggestions automatically appear at bottom (if enabled)
+        5. **New**: Results auto-exported to JSON and text files
         
-        ### 4. Explore Clustering
-        1. Check "🎯 Clustering Analysis" tab
-        2. View cluster distributions and metrics
-        3. See clustering performance plots
+        ### 5. Explore Advanced Features
+        1. **🎯 Clustering Analysis**: View cluster distributions and performance
+        2. **📊 Product Suggestions**: AI-generated product names with similarity scores
+        3. **🔧 System Status**: Monitor files, components, and debug information
+        4. **📁 Export Management**: Access exported suggestion files
         """)
 
     def show_pipeline_guide(self):
@@ -2403,11 +2952,18 @@ class FullFlowApp:
         - Requires: `--query "your query here"`
         - Options: `--embedding_type`, `--rag_top_k`
         
+        **5. product_suggestion** ⭐ NEW
+        - AI-powered product suggestions for companies
+        - Generates product names using patent analysis and keyword combinations
+        - Automatic export to JSON and text files
+        - Options: `--query`, `--product_similarity_threshold`, `--enable_openai_enhance`
+        
         ### Execution Order
         1. **dual_attn** (always first)
         2. **clustering** (for clustering analysis)
         3. **patent_product --mode train** (build models)
         4. **patent_product --mode test/chat** (run queries)
+        5. **product_suggestion** (generate AI product suggestions)
         """)
 
     def show_clustering_guide(self):
@@ -2466,6 +3022,14 @@ class FullFlowApp:
         - `find_nearest_cluster()` - Find cluster for query embedding
         - `get_cluster_info()` - Get cluster details
         
+        **Product Suggestion Pipeline:** ⭐ NEW
+        - `PatentProductSuggester()` - Main suggestion class
+        - `suggest_products()` - Generate product suggestions for companies
+        - `suggest_products_for_company()` - Analyze single company
+        - `generate_product_names()` - Create product names from keywords
+        - `export_results()` - Export to JSON format
+        - `export_results_as_text()` - Export to human-readable text
+        
         ### Configuration Options
         
         ```python
@@ -2475,7 +3039,15 @@ class FullFlowApp:
             'enable_clustering': True | False,
             'force_rebuild_clustering': True | False,
             'rag_top_k': int,
-            'countries': ['US', 'CN', 'JP']
+            'countries': ['US', 'CN', 'JP'],
+            # ⭐ NEW: Product Suggestion Options
+            'enable_product_suggestions': True | False,
+            'product_similarity_threshold': float,  # 0.0-1.0
+            'max_suggestions_per_company': int,     # 1-10
+            'enable_openai_enhance': True | False,
+            'max_combinations_setting': int,       # 2-5
+            'max_patents_per_company': int,        # Performance limit
+            'max_abstract_length': int             # Text truncation
         }
         ```
         
@@ -2490,6 +3062,35 @@ class FullFlowApp:
         
         # Find nearest cluster for query
         cluster_id, distance = analyzer.find_nearest_cluster(query_embedding)
+        
+        # ⭐ NEW: Product Suggestion Examples
+        from pipelines.product_suggestion_pipeline import PatentProductSuggester
+        
+        # Initialize product suggester
+        suggestion_config = {
+            'similarity_threshold': 0.075,
+            'top_k_suggestions': 5,
+            'enable_openai_enhance': False,
+            'max_combinations': 5
+        }
+        suggester = PatentProductSuggester(suggestion_config)
+        
+        # Generate suggestions for companies
+        companies_data = [
+            {
+                'hojinid': '12345',
+                'name': 'TechCorp Inc.',
+                'keywords': ['ai', 'machine', 'learning', 'software'],
+                'patents': [{'id': 'P001', 'abstract': 'AI system for...'}],
+                'source': 'transformation_matrix'
+            }
+        ]
+        
+        results = suggester.suggest_products('AI technology', companies_data)
+        
+        # Export results
+        json_path = suggester.export_results(results)
+        text_path = suggester.export_results_as_text(results)
         ```
         """)
 
@@ -2538,6 +3139,45 @@ class FullFlowApp:
         - Adjust `CLUSTER_NUMBERS_RANGE` for different ranges
         - Modify `CLUSTERING_MAX_ITER` for convergence
         - Set `CLUSTERING_RANDOM_STATE` for reproducibility
+        
+        ### Product Suggestion Configuration ⭐ NEW
+        
+        **Core Settings:**
+        - **Enable Product Suggestions**: Turn feature on/off
+        - **Similarity Threshold**: Minimum score for suggestions (0.0-1.0)
+        - **Max Suggestions**: Number of products per company (1-10)
+        - **Max Combinations**: Keywords per product name (2-5)
+        
+        **AI Enhancement:**
+        - **Enable OpenAI**: Use GPT models for name improvement
+        - **Model Selection**: Choose GPT model (gpt-4o-mini default)
+        - **API Key**: Required for OpenAI features (.env file)
+        
+        **Advanced Parameters:**
+        ```python
+        PRODUCT_SUGGESTION_CONFIG = {
+            'alpha': 0.3,              # Keywords vs patents weight
+            'beta': 0.3,               # Lexical vs semantic weight  
+            'similarity_threshold': 0.075,  # Minimum similarity
+            'max_keywords': 20,        # Keywords per analysis
+            'max_combinations': 5,     # Max keyword combinations
+            'use_patent_data': True    # Include patent analysis
+        }
+        ```
+        
+        ### Export Configuration ⭐ NEW
+        
+        **Automatic Export:**
+        - **JSON Directory**: `data/suggestions/` (structured data)
+        - **Text Directory**: `data/submissions/` (human-readable)
+        - **File Naming**: `product_suggestions_YYYYMMDD_HHMMSS`
+        - **Manual Re-export**: Available in UI after each query
+        
+        **File Management:**
+        - Files created automatically after each query
+        - Consistent relative path display
+        - Size and timestamp information included
+        - Export status shown in UI with file paths
         """)
 
     def show_troubleshooting(self):
@@ -2577,6 +3217,36 @@ class FullFlowApp:
         - Close other applications
         - Consider using a smaller dataset for testing
         
+        **"No product suggestions generated"** ⭐ NEW
+        - Lower similarity threshold (try 0.05 or 0.03)
+        - Check if companies have sufficient keywords/patents
+        - Verify clustering data loaded properly
+        - Enable debug mode for detailed logging
+        
+        **"Product suggestions showing 'unknown' company IDs"** ⭐ NEW
+        - Fixed: Enhanced company ID resolution implemented
+        - Ensure clustering analyzer is properly loaded
+        - Check that company data is complete
+        - Verify hojin_id mapping exists
+        
+        **"Only single-word products generated"** ⭐ NEW
+        - Fixed: System now enforces 2+ keyword combinations
+        - Check `max_combinations_setting` configuration
+        - Verify keyword filtering is working properly
+        - Use debug mode to see keyword processing
+        
+        **"Export files not created"** ⭐ NEW
+        - Check write permissions for `data/suggestions/` and `data/submissions/`
+        - Verify sufficient disk space
+        - Check console logs for export error messages
+        - Ensure output directories exist
+        
+        **"OpenAI enhancement not working"** ⭐ NEW
+        - Verify `.env` file contains valid `OPENAI_API_KEY`
+        - Check OpenAI API quota and billing
+        - Try disabling OpenAI to test basic functionality
+        - Check console for OpenAI API error messages
+        
         ### Performance Tips
         
         1. **Use FastText for speed** - Especially for large datasets
@@ -2584,6 +3254,15 @@ class FullFlowApp:
         3. **Start with smaller datasets** - Test functionality before full runs
         4. **Monitor memory usage** - Watch system resources during clustering
         5. **Use force rebuild sparingly** - Only when necessary to save time
+        6. **Optimize product suggestions** ⭐ NEW:
+           - Start with higher similarity threshold (0.1) and adjust down
+           - Limit max suggestions per company (3-5) for faster processing
+           - Disable OpenAI enhancement for faster results during testing
+           - Use `max_combinations_setting=3` for quicker keyword processing
+        7. **Manage export files** ⭐ NEW:
+           - Clean old suggestion files regularly to save disk space
+           - Monitor `data/suggestions/` and `data/submissions/` directories
+           - Use System Status tab to check file sizes and counts
         
         ### File Locations
         
@@ -2592,6 +3271,303 @@ class FullFlowApp:
         - **Performance Plots**: `data/output/img/`
         - **Models**: `data/clustering/models/`
         - **Config**: `streamlit_config.json`
+        - **Product Suggestions (JSON)**: `data/suggestions/` ⭐ NEW
+        - **Product Suggestions (Text)**: `data/submissions/` ⭐ NEW
+        - **Core Data**: `data/CN_JP_US_data/` (patent & company data)
+        - **Vector Database**: `data/vector_db/` (RAG embeddings)
+        """)
+
+    def show_product_suggestions_guide(self):
+        """Show product suggestions documentation"""
+        st.markdown("""
+        ## 🛍️ Product Suggestions Guide
+        
+        ### Overview
+        
+        The **Product Suggestion Pipeline** is an AI-powered feature that generates relevant product names for companies based on:
+        - 📊 **Company Keywords**: Extracted from business profiles  
+        - 🔬 **Patent Analysis**: Technical abstracts and innovations
+        - 🤖 **AI Enhancement**: Optional OpenAI integration for product name refinement
+        
+        ### How It Works
+        
+        **1. Data Collection**
+        - Analyzes companies from both **Transformation Matrix** results and **Nearest Cluster** matches
+        - Loads full patent abstracts (not truncated versions)
+        - Extracts comprehensive keyword sets (not just display keywords)
+        
+        **2. Product Generation**
+        - Creates combinations of 2-5 keywords (configurable)
+        - Filters out single-word and invalid combinations
+        - Uses semantic similarity for patent-product matching
+        - Applies lexical and semantic weighting (alpha/beta parameters)
+        
+        **3. AI Enhancement** (Optional)
+        - Uses OpenAI GPT models to improve product names
+        - Makes names more market-ready and professional
+        - Maintains technical accuracy while improving readability
+        
+        ### Configuration Options
+        
+        **Sidebar Settings:**
+        ```
+        🛍️ Product Suggestion Configuration
+        ├── ✅ Enable Product Suggestions
+        ├── 🎯 Similarity Threshold (0.075 default)
+        ├── 📊 Max Suggestions per Company (5 default)  
+        ├── 🤖 Enable OpenAI Enhancement
+        └── 🔢 Max Keyword Combinations (2-5)
+        ```
+        
+        **Key Parameters:**
+        - **Similarity Threshold**: Minimum similarity score for suggestions (0.0-1.0)
+        - **Alpha (α)**: Weight between keywords vs patents (0.3 default)
+        - **Beta (β)**: Weight between lexical vs semantic similarity (0.3 default)
+        - **Max Combinations**: Maximum keywords per product name (2-5)
+        
+        ### Usage Steps
+        
+        **1. Enable Feature**
+        ```
+        ☑️ Enable Product Suggestions (in sidebar)
+        ```
+        
+        **2. Configure Settings**
+        ```
+        🎯 Similarity Threshold: 0.075
+        📊 Max Suggestions: 5
+        🤖 OpenAI Enhancement: Optional
+        🔢 Max Combinations: 5
+        ```
+        
+        **3. Run Query**
+        - Execute any query in the Query Interface
+        - Product suggestions automatically appear at the bottom
+        - Results are auto-exported to files
+        
+        ### Output Files
+        
+        **Automatic Export** (after each query):
+        - 📄 **JSON**: `data/suggestions/product_suggestions_YYYYMMDD_HHMMSS.json`
+        - 📝 **Text**: `data/submissions/product_suggestions_YYYYMMDD_HHMMSS.txt`
+        
+        **JSON Structure:**
+        ```json
+        {
+          "metadata": {
+            "query": "your search query",
+            "timestamp": "2025-01-XX XX:XX:XX",
+            "total_companies": 10,
+            "companies_with_suggestions": 8
+          },
+          "results": [
+            {
+              "company_name": "TechCorp Inc.",
+              "company_id": "12345",
+              "source": "transformation_matrix",
+              "products": [
+                {
+                  "name": "Smart IoT Sensor",
+                  "similarity_score": 0.85,
+                  "keywords_used": ["smart", "iot", "sensor"],
+                  "enhanced_name": "Smart IoT Environmental Sensor" 
+                }
+              ]
+            }
+          ]
+        }
+        ```
+        
+        ### Integration with Clustering
+        
+        **Dual Source Processing:**
+        - **🔬 Transformation Matrix Companies**: Direct query results
+        - **🎯 Nearest Cluster Companies**: Companies from similar market segments
+        
+        **Enhanced Data Access:**
+        - Full company keyword sets (not display-limited)
+        - Complete patent abstracts for better analysis
+        - Dynamic company ID resolution from clustering data
+        
+        ### Performance Considerations
+        
+        **Optimization Settings:**
+        ```python
+        MAX_PATENTS_PER_COMPANY = 20  # Patent processing limit
+        MAX_KEYWORDS = 20            # Keyword extraction limit  
+        MAX_COMBINATIONS = 5         # Keyword combination limit
+        ```
+        
+        **Processing Time:**
+        - ~2-5 seconds per company (without OpenAI)
+        - ~5-15 seconds per company (with OpenAI)
+        - Parallel processing for better performance
+        
+        ### Troubleshooting
+        
+        **"No product suggestions generated"**
+        - Lower similarity threshold (try 0.05)
+        - Check if companies have sufficient keywords/patents
+        - Verify clustering data is loaded properly
+        
+        **"Only getting single-word products"**
+        - Fixed: System now only generates 2+ keyword combinations
+        - Check `max_combinations_setting` in configuration
+        
+        **"Company IDs showing as 'unknown'"**
+        - Fixed: Enhanced company ID resolution from clustering data
+        - Verify clustering analyzer is properly loaded
+        
+        **"Export files not created"**
+        - Check write permissions for `data/suggestions/` and `data/submissions/`
+        - Verify sufficient disk space
+        - Check console for export error messages
+        """)
+
+    def show_export_file_guide(self):
+        """Show export and file management documentation"""
+        st.markdown("""
+        ## 📁 Export & File Management Guide
+        
+        ### Automatic Export Features
+        
+        **Product Suggestions Export** ⭐ NEW
+        - **When**: Automatically after each query with product suggestions enabled
+        - **Formats**: JSON (structured data) + Text (human-readable)
+        - **Location**: `data/suggestions/` and `data/submissions/`
+        - **Naming**: `product_suggestions_YYYYMMDD_HHMMSS.json/txt`
+        
+        **Export Status Display:**
+        ```
+        📄 JSON: data/suggestions/product_suggestions_20250130_143022.json
+        📝 Text: data/submissions/product_suggestions_20250130_143022.txt
+        
+        📊 Export Summary:
+        • Companies Analyzed: 12
+        • Companies with Suggestions: 8  
+        • Total Products: 34
+        • Average Similarity: 0.124
+        ```
+        
+        ### File System Structure
+        
+        ```
+        FullFlow/
+        ├── data/
+        │   ├── CN_JP_US_data/          # Core dataset files
+        │   │   ├── us_web_with_company.csv
+        │   │   ├── us_patent202506.csv
+        │   │   ├── cleaned_patents.csv
+        │   │   └── fasttext_web_patent.vec
+        │   ├── clustering/             # Clustering analysis results
+        │   │   ├── models/            # Trained clustering models
+        │   │   └── results/           # Performance data & assignments
+        │   ├── suggestions/           # Product suggestion JSON exports ⭐ NEW
+        │   ├── submissions/           # Product suggestion text exports ⭐ NEW
+        │   ├── outputs/              # General pipeline outputs
+        │   └── vector_db/            # RAG vector database
+        ├── models/                   # ML model checkpoints
+        └── streamlit_config.json     # UI configuration persistence
+        ```
+        
+        ### Enhanced File Status Monitoring
+        
+        **System Status Tab** shows comprehensive file checking:
+        
+        **📁 Directory Status:**
+        ```
+        ✅ Data Directory: data/CN_JP_US_data (X files)
+        ✅ Models Directory: models (5 files)  
+        ✅ Clustering Results: data/clustering/results (12 files)
+        ✅ Vector Database: data/vector_db (1 files)
+        ```
+        
+        **📄 Critical Data Files:**
+        ```
+        ✅ US Web Data: data/CN_JP_US_data/us_web_with_company.csv (15.2 MB)
+        ✅ US Patent Data: data/CN_JP_US_data/us_patent202506.csv (2.1 GB)
+        ✅ FastText Vectors: data/CN_JP_US_data/fasttext_web_patent.vec (1.8 GB)
+        ```
+        
+        ### Enhanced Debug Information
+        
+        **Clustering Debug** (improved display):
+        ```
+        📁 File Status:
+        ✅ evaluation_results: data/clustering/results/US_fasttext_evaluation_results.json
+        ✅ best_model: data/clustering/models/US_fasttext_best_clustering_model.pkl
+        ✅ assignments: data/clustering/results/US_fasttext_cluster_assignments.csv
+        ❌ visualization: data/clustering/results/US_fasttext_clustering_visualization.png
+        ```
+        
+        ### Manual Export Options
+        
+        **Product Suggestions Re-export:**
+        - 📄 **Re-export to JSON**: Regenerate JSON file with current timestamp
+        - 📝 **Re-export to Text**: Regenerate human-readable text file
+        - **Location**: Same directories as automatic export
+        
+        ### File Management Best Practices
+        
+        **1. Regular Cleanup**
+        ```bash
+        # Clean old suggestion files (keep last 10)
+        ls -t data/suggestions/*.json | tail -n +11 | xargs rm -f
+        ls -t data/submissions/*.txt | tail -n +11 | xargs rm -f
+        ```
+        
+        **2. Backup Important Results**
+        ```bash
+        # Backup clustering results
+        cp -r data/clustering/ backup/clustering_$(date +%Y%m%d)/
+        
+        # Backup recent suggestions  
+        cp data/suggestions/product_suggestions_*.json backup/suggestions/
+        ```
+        
+        **3. Monitor Disk Space**
+        - **Large Files**: Patent data (~2GB), FastText vectors (~2GB)
+        - **Growing**: Product suggestions, clustering results
+        - **Check**: Use System Status tab for monitoring
+        
+        ### File Formats & Compatibility
+        
+        **JSON Export** (machine-readable):
+        - Full structured data with metadata
+        - Easy import into other tools/databases
+        - Preserves all similarity scores and parameters
+        
+        **Text Export** (human-readable):
+        - Formatted for easy reading and sharing
+        - Includes summary statistics
+        - Suitable for reports and presentations
+        
+        **Clustering Files**:
+        - **Models**: `.pkl` (Python pickle format)
+        - **Assignments**: `.csv` (Excel/database compatible)
+        - **Plots**: `.png` (standard image format)
+        
+        ### Troubleshooting File Issues
+        
+        **"Permission denied" errors**
+        - Check write permissions for output directories
+        - Run with appropriate user privileges
+        - Ensure directories exist and are writable
+        
+        **"Disk space" errors**
+        - Clean old export files regularly
+        - Monitor large dataset files
+        - Consider using external storage for backups
+        
+        **"File not found" errors**
+        - Use System Status tab to verify file existence
+        - Check file paths in configuration
+        - Ensure required pipelines have been run
+        
+        **"Corrupted export files"**
+        - Use manual re-export options
+        - Check console logs for detailed error messages
+        - Verify sufficient disk space during export
         """)
 
 def main():

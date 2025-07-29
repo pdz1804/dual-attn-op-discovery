@@ -52,8 +52,8 @@ class EnhancedEmbedder:
             logger.info(f"Loading sentence transformer: {model_name}")
             self.model = SentenceTransformer(model_name)
             
-            # Get embedding dimension by encoding a sample text
-            sample_embedding = self.model.encode("sample text")
+            # Get embedding dimension by encoding a sample text (disable progress bar)
+            sample_embedding = self.model.encode("sample text", show_progress_bar=False)
             self.vector_size = len(sample_embedding)
             logger.info(f"Sentence transformer loaded with embedding dimension: {self.vector_size}")
         else:
@@ -74,8 +74,8 @@ class EnhancedEmbedder:
         Encode multiple texts into embeddings
         """
         if self.embedding_type == 'sentence_transformer':
-            # Sentence transformers can batch encode efficiently
-            return self.model.encode(texts)
+            # Sentence transformers can batch encode efficiently (disable progress bar)
+            return self.model.encode(texts, show_progress_bar=False)
         else:
             # For FastText, encode individually
             return np.array([self.encode_text(text) for text in texts])
@@ -104,7 +104,7 @@ class EnhancedEmbedder:
             keywords = [w.strip() for w in keywords if w.strip()]
             text = ' '.join(keywords)
         
-        return self.model.encode(text)
+        return self.model.encode(text, show_progress_bar=False)
     
     def save_model(self, path: str):
         """
