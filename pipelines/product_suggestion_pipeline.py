@@ -106,6 +106,7 @@ class PatentProductSuggester:
         # Initialize models
         logger.info(f"Loading sentence embedding model: {self.config['model_name']}")
         self.embedder = SentenceTransformer(self.config['model_name'])
+        
         # Disable progress bars for cleaner output
         self.embedder.encode("test", show_progress_bar=False)  # Initialize and set default
         
@@ -464,7 +465,7 @@ class PatentProductSuggester:
                     logger.info(f"Processing {r}-keyword combinations")
                 
                 combinations_count = 0
-                for combo in list(combinations(all_keywords, r))[:15]:  # Limit combinations per size
+                for combo in list(combinations(all_keywords, r))[:100]:  # Limit combinations per size
                     # FIXED: Keywords are already filtered, so just use them directly
                     combo_parts = [kw.strip() for kw in combo if kw.strip()]
                     
@@ -475,7 +476,7 @@ class PatentProductSuggester:
                             logger.info(f"  Valid {r}-combo #{combinations_count}: {combo_parts}")
                         if r == 2:
                             # Use domain-specific combination templates (expanded for more variety)
-                            for template in templates['combinations'][:8]:  # Increased from 6 to 8
+                            for template in templates['combinations'][:15]:  # Increased from 6 to 8
                                 if template.count('{}') == 2:
                                     products.append(template.format(
                                         combo_parts[0].title(), 
@@ -1230,7 +1231,6 @@ class PatentProductSuggester:
         if total > 0:
             logger.info(f"Patent Processing - {company_name}: {full_count}/{total} patents using full abstracts, {fallback_count}/{total} using fallback")
 
-
 def convert_pipeline_results_to_suggestions_format(results: List[Dict]) -> List[Dict]:
     """
     Convert pipeline results to the format expected by product suggestions.
@@ -1267,7 +1267,6 @@ def convert_pipeline_results_to_suggestions_format(results: List[Dict]) -> List[
     
     return suggestions_format
 
-
 def product_suggestion_pipeline(
     user_query: str,
     companies_data: List[Dict[str, Any]],
@@ -1297,3 +1296,6 @@ def product_suggestion_pipeline(
     
     logger.info(f"Product suggestion pipeline completed. Results saved to: {output_path}")
     return output_path 
+
+
+

@@ -133,11 +133,11 @@ MAX_PATENTS_FOR_ANALYSIS = 20  # Maximum patents to analyze for keyword extracti
 
 # Keyword extraction limits for different contexts
 KEYWORD_EXTRACTION_LIMITS = {
-    'similarity_computation': 15,  # Keywords for similarity comparison
-    'patent_analysis': 10,  # Keywords per patent for analysis
-    'theme_extraction': 5,  # Keywords for theme generation
-    'top_keywords_limit': 15,  # Top keywords to keep from frequency analysis
-    'theme_combinations': 5  # Max theme combinations to generate
+    'similarity_computation': 45,  # Keywords for similarity comparison
+    'patent_analysis': 40,  # Keywords per patent for analysis
+    'theme_extraction': 20,  # Keywords for theme generation
+    'top_keywords_limit': 20,  # Top keywords to keep from frequency analysis
+    'theme_combinations': 20  # Max theme combinations to generate
 }
 
 # Note: Product name templates are now domain-specific and defined within the pipeline

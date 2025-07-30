@@ -246,7 +246,7 @@ def display_unified_results(query, results, method, company_data=None, firm_pate
         if config and config.get('enable_product_suggestions', False):
             try:
                 # Import product suggestion pipeline
-                from pipelines.product_suggestion_pipeline import PatentProductSuggester, convert_pipeline_results_to_suggestions_format
+                from pipelines.product_suggestion_pipeline import PatentProductSuggester
                 
                 # Convert current result to format expected by product suggester
                 company_data_for_suggestions = [{
